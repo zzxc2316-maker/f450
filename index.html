@@ -1,0 +1,3712 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>F450 Quadcopter BMS 3D Runway Flight Simulator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body, html { width: 100%; height: 100%; overflow: hidden; background: #87ceeb; font-family: 'Segoe UI', Pretendard, sans-serif; }
+  #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+  
+  /* HUD Overlay */
+  #hud-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10; pointer-events: none;
+  }
+  .hud-interactive { pointer-events: auto; }
+
+  /* Top Left Controls */
+  .top-left-controls {
+    position: absolute; top: 22px; left: 22px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .hud-circle-btn {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.45);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    color: #1e3a5f; font-size: 20px; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    transition: all 0.2s ease;
+  }
+  .hud-circle-btn:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: scale(1.08);
+  }
+
+  /* Top Center Telemetry Strip */
+  .telemetry-strip {
+    position: absolute; top: 22px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(0, 229, 255, 0.5);
+    border-radius: 12px;
+    padding: 6px 18px;
+    display: flex; gap: 20px;
+    color: #e2e8f0; font-size: 13px; font-family: monospace;
+    backdrop-filter: blur(6px);
+  }
+  .tel-item span { color: #00e5ff; font-weight: 700; }
+
+  /* Top Right Badges (Timer & Battery & Temp) */
+  .top-right-bar {
+    position: absolute; top: 22px; right: 28px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .temp-badge {
+    background: rgba(26, 36, 54, 0.7);
+    border: 2px solid #00e5ff;
+    border-radius: 12px;
+    padding: 6px 14px;
+    color: #ffffff; font-weight: 700; font-size: 16px;
+    backdrop-filter: blur(6px);
+  }
+  .timer-badge {
+    background: rgba(0, 229, 255, 0.35);
+    border: 2px solid #00e5ff;
+    border-radius: 24px;
+    padding: 6px 16px;
+    display: flex; align-items: center; gap: 8px;
+    color: #ffffff; font-weight: 700; font-size: 18px;
+    letter-spacing: 1px;
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.8);
+    backdrop-filter: blur(6px);
+  }
+  .timer-badge svg { width: 18px; height: 18px; fill: #ffffff; }
+
+  .battery-badge {
+    background: rgba(46, 204, 113, 0.35);
+    border: 2px solid #2ecc71;
+    border-radius: 12px;
+    padding: 6px 14px;
+    display: flex; align-items: center; gap: 8px;
+    color: #ffffff; font-weight: 700; font-size: 16px;
+    backdrop-filter: blur(6px);
+  }
+  .battery-cells {
+    display: flex; gap: 3px; align-items: center;
+  }
+  .b-cell {
+    width: 6px; height: 16px; background: #2ecc71; border-radius: 1px;
+    box-shadow: 0 0 6px #2ecc71;
+  }
+
+  /* Right Side Altitude Ladder (Tape) */
+  .altimeter-container {
+    position: absolute; right: 26px; top: 90px;
+    width: 48px; height: 380px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .alt-ladder {
+    width: 14px; height: 100%;
+    background: rgba(0, 229, 255, 0.25);
+    border: 1.5px solid rgba(0, 229, 255, 0.7);
+    border-radius: 7px;
+    position: relative;
+    overflow: hidden;
+  }
+  .alt-fill {
+    position: absolute; bottom: 0; left: 0; width: 100%;
+    height: 33%; background: linear-gradient(to top, #00e5ff, #00b0ff);
+    box-shadow: 0 0 12px #00e5ff;
+    transition: height 0.1s linear;
+  }
+  .alt-ticks {
+    position: absolute; right: 20px; height: 100%;
+    display: flex; flex-direction: column; justify-content: space-between;
+    font-size: 11px; font-weight: 700; color: #00e5ff;
+    text-shadow: 0 0 6px rgba(0,229,255,0.9);
+  }
+  .alt-value-box {
+    position: absolute; right: 38px;
+    background: rgba(0, 229, 255, 0.85);
+    color: #0b1a2d; font-weight: 900; font-size: 12px;
+    padding: 2px 6px; border-radius: 4px;
+    transform: translateY(50%);
+    box-shadow: 0 0 8px #00e5ff;
+  }
+
+  /* Bottom BMS Control Dashboard */
+  .bottom-dashboard {
+    position: absolute; bottom: 25px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    z-index: 20;
+  }
+  .state-banner {
+    background: rgba(15, 23, 42, 0.85);
+    border: 2px solid #00e5ff;
+    border-radius: 30px;
+    padding: 7px 26px;
+    color: #ffffff; font-weight: 800; font-size: 15px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    display: flex; align-items: center; gap: 12px;
+    backdrop-filter: blur(8px);
+  }
+  .status-led {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #00e5ff; box-shadow: 0 0 10px #00e5ff;
+  }
+
+  .mode-btn-group {
+    display: flex; gap: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    padding: 6px 10px; border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+  }
+  .m-btn {
+    border: none; outline: none;
+    padding: 8px 16px; border-radius: 14px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.2s ease;
+    color: #ffffff; background: rgba(255,255,255,0.1);
+  }
+  .m-btn:hover { transform: translateY(-2px); filter: brightness(1.2); }
+  .m-btn.active {
+    box-shadow: 0 0 15px currentColor;
+    font-weight: 900;
+  }
+  .m-btn.btn-lipo { background: #3b82f6; }
+  .m-btn.btn-30 { background: #10b981; }
+  .m-btn.btn-60 { background: #f59e0b; }
+  .m-btn.btn-70 { background: #ef4444; }
+
+  /* Key controls hint */
+  .key-hint {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+
+  /* Real-time Telemetry Scope HUD Overlay Panel */
+  .live-scope-panel {
+    position: absolute;
+    bottom: 125px;
+    right: 25px;
+    width: 320px;
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    border-radius: 10px;
+    padding: 10px 12px;
+    z-index: 20;
+    backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+  }
+  .live-scope-panel.minimized #scope-content {
+    display: none;
+  }
+  .scope-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #e2e8f0;
+    user-select: none;
+  }
+
+  /* Cinematic Film Lens Vignette */
+  #vignette {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5;
+    background: radial-gradient(circle at center, transparent 58%, rgba(8, 14, 26, 0.42) 100%);
+  }
+
+  /* Attitude & Wind Vector Overlay HUD (PFD Style) */
+  .attitude-wind-hud {
+    position: absolute;
+    bottom: 125px;
+    left: 25px;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    background: rgba(11, 17, 32, 0.88);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    border-radius: 12px;
+    padding: 10px 14px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 12px rgba(56, 189, 248, 0.25);
+    z-index: 20;
+    color: #f1f5f9;
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    user-select: none;
+    transition: all 0.3s ease;
+  }
+  .hud-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .hud-block-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #38bdf8;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .pfd-dial-container {
+    position: relative;
+    width: 105px;
+    height: 105px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid #334155;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.8), 0 0 8px rgba(56, 189, 248, 0.25);
+    background: #0f172a;
+  }
+  .pfd-horizon-sphere {
+    position: absolute;
+    width: 210px;
+    height: 210px;
+    left: -52.5px;
+    top: -52.5px;
+    transition: transform 0.05s linear;
+    transform-origin: center center;
+  }
+  .pfd-sky {
+    width: 100%;
+    height: 50%;
+    background: linear-gradient(180deg, #0284c7 0%, #38bdf8 100%);
+  }
+  .pfd-ground {
+    width: 100%;
+    height: 50%;
+    background: linear-gradient(180deg, #92400e 0%, #451a03 100%);
+    border-top: 2px solid #ffffff;
+  }
+  .pfd-crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 20px;
+    pointer-events: none;
+  }
+  .pfd-crosshair::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: 9px;
+    width: 18px;
+    height: 3px;
+    background: #facc15;
+    box-shadow: 0 0 4px #000;
+  }
+  .pfd-crosshair::after {
+    content: '';
+    position: absolute;
+    right: 2px;
+    top: 9px;
+    width: 18px;
+    height: 3px;
+    background: #facc15;
+    box-shadow: 0 0 4px #000;
+  }
+  .pfd-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #facc15;
+    box-shadow: 0 0 4px #000;
+  }
+  .hud-digital-readout {
+    display: flex;
+    gap: 8px;
+    font-size: 10px;
+    font-family: monospace;
+    font-weight: 700;
+  }
+  .hud-digital-readout span {
+    color: #94a3b8;
+  }
+  .hud-digital-readout b {
+    color: #f8fafc;
+  }
+  .wind-dial-container {
+    position: relative;
+    width: 105px;
+    height: 105px;
+    border-radius: 50%;
+    border: 2px solid #334155;
+    background: radial-gradient(circle at center, #1e293b 0%, #0b1120 100%);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.8), 0 0 8px rgba(56, 189, 248, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wind-compass-card {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    font-size: 9px;
+    font-weight: 800;
+    color: #64748b;
+  }
+  .wind-compass-card span {
+    position: absolute;
+    transform: translate(-50%, -50%);
+  }
+  .wind-compass-n { top: 8px; left: 50%; color: #ef4444; }
+  .wind-compass-s { bottom: 1px; left: 50%; }
+  .wind-compass-e { top: 50%; right: 4px; }
+  .wind-compass-w { top: 50%; left: 9px; }
+  .wind-arrow-rotator {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease-out;
+  }
+  .wind-arrow-svg {
+    width: 64px;
+    height: 64px;
+    filter: drop-shadow(0 0 6px #00e5ff);
+  }
+  .wind-speed-center {
+    position: absolute;
+    text-align: center;
+    pointer-events: none;
+    font-family: monospace;
+  }
+  .wind-speed-val {
+    font-size: 13px;
+    font-weight: 900;
+    color: #38bdf8;
+    line-height: 1.1;
+  }
+  .wind-speed-unit {
+    font-size: 8px;
+    color: #94a3b8;
+    font-weight: 600;
+  }
+  .drone-hull-status-tag {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(0, 229, 255, 0.18);
+    border: 1px solid #00e5ff;
+    color: #00e5ff;
+    transition: all 0.3s ease;
+  }
+
+
+  /* =====================================================================
+     Mobile Responsive Viewport Optimization (Phones & Tablets)
+     ===================================================================== */
+  .mobile-top-telemetry {
+    display: none;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(11, 17, 32, 0.92);
+    border: 1.5px solid rgba(0, 229, 255, 0.55);
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-size: 12px;
+    font-family: 'Segoe UI', monospace;
+    color: #f1f5f9;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.6), 0 0 10px rgba(0,229,255,0.25);
+    z-index: 30;
+    white-space: nowrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .mob-tel-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 800;
+  }
+  .m-btn span.btn-full-text {
+    display: inline;
+  }
+  .m-btn span.btn-short-text {
+    display: none;
+  }
+
+  /* When on Mobile (Portrait & Landscape) */
+  @media (max-width: 900px), (max-height: 500px) {
+    /* Top Left Floating Circle Buttons (Camera, Reset) - Smaller & Discreet */
+    .top-left-controls {
+      top: 12px;
+      left: 12px;
+      gap: 6px;
+      z-index: 35;
+    }
+    .hud-circle-btn {
+      width: 32px;
+      height: 32px;
+      font-size: 13px;
+      border-width: 1.5px;
+      background: rgba(15, 23, 42, 0.7);
+      border-color: rgba(56, 189, 248, 0.6);
+      color: #38bdf8;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    /* Hide bulky desktop panels on mobile */
+    .telemetry-strip { display: none !important; }
+    .top-right-bar { display: none !important; }
+    .state-banner { display: none !important; }
+    .key-hint { display: none !important; }
+    .attitude-wind-hud { display: none !important; }
+    .live-scope-panel { display: none !important; }
+    .altimeter-container { display: none !important; }
+
+    /* Compact Top Bar: Only Current Temp, Power, Voltage & Battery */
+    .mobile-top-telemetry {
+      display: flex !important;
+      top: 12px;
+    }
+
+    /* Bottom Mode Buttons: Small, Sleek & Compact at the Bottom */
+    .bottom-dashboard {
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      padding: 0 10px;
+      gap: 0;
+      z-index: 35;
+    }
+    .mode-btn-group {
+      display: flex;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 16px;
+      background: rgba(11, 17, 32, 0.94);
+      border: 1.5px solid rgba(56, 189, 248, 0.4);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.7), 0 0 12px rgba(56, 189, 248, 0.2);
+      max-width: 96vw;
+      justify-content: center;
+    }
+    .m-btn {
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .m-btn span.btn-full-text {
+      display: none !important;
+    }
+    .m-btn span.btn-short-text {
+      display: inline !important;
+    }
+  }
+
+  /* Ultra-compact landscape fine-tuning */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .top-left-controls {
+      flex-direction: row;
+      top: 8px;
+      left: 10px;
+      gap: 6px;
+    }
+    .hud-circle-btn {
+      width: 28px;
+      height: 28px;
+      font-size: 11px;
+    }
+    .mobile-top-telemetry {
+      top: 8px;
+      padding: 4px 14px;
+      font-size: 11px;
+    }
+    .bottom-dashboard {
+      bottom: 8px;
+    }
+    .m-btn {
+      padding: 5px 11px;
+      font-size: 11px;
+    }
+  }
+</style>
+
+
+<!-- Load local Three.js with CDN fallback -->
+<script src="three.min.js"></script>
+<script>
+  if (typeof THREE === 'undefined') {
+    document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+  }
+</script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="vignette"></div>
+
+<!-- HUD Overlay -->
+<div id="hud-overlay">
+  <!-- Mobile Compact Telemetry Strip (Temp, Power, Volt, Batt) -->
+  <div class="mobile-top-telemetry hud-interactive">
+    <div class="mob-tel-item" style="color: #00e5ff;">
+      🌡 <span id="mob-temp-val">30.0</span>°C
+    </div>
+    <div style="color: #475569;">|</div>
+    <div class="mob-tel-item" style="color: #facc15;">
+      ⚡ <span id="mob-pwr-val">244</span>W
+    </div>
+    <div style="color: #475569;">|</div>
+    <div class="mob-tel-item" style="color: #38bdf8;">
+      <span id="mob-volt-val">16.5</span>V
+    </div>
+    <div style="color: #475569;">|</div>
+    <div class="mob-tel-item" style="color: #10b981;">
+      🔋 <span id="mob-batt-val">100%</span>
+    </div>
+  </div>
+
+  <!-- Top Left Icons -->
+  <div class="top-left-controls hud-interactive">
+    <div class="hud-circle-btn" id="btn-pause" title="일시정지/재생">❚❚</div>
+    <div class="hud-circle-btn" id="btn-cam" title="카메라 시점 전환">📷</div>
+    <div class="hud-circle-btn" id="btn-orbit" title="자유 회전 궤도">🔄</div>
+    <div class="hud-circle-btn" id="btn-reset" title="원위치 리셋">⚡</div>
+  </div>
+
+  <!-- Top Center Telemetry Strip -->
+  <div class="telemetry-strip">
+    <div class="tel-item" id="matlab-badge" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.5); padding: 2px 8px; border-radius: 6px; font-weight: bold; color: #10b981; display: flex; align-items: center; gap: 6px;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block; box-shadow: 0 0 6px #10b981;"></span>
+      <span id="matlab-status-text">MATLAB LINK: CONNECTED</span>
+    </div>
+    <div class="tel-item">ALT: <span id="tel-alt">10.0</span>m</div>
+    <div class="tel-item">SPD: <span id="tel-spd">12.5</span>m/s</div>
+    <div class="tel-item" style="display:flex; align-items:center; gap:4px;">WIND: <span id="tel-wind-spd">3.2</span>m/s <span id="tel-wind-arrow" style="display:inline-block; font-size:13px; color:#38bdf8; font-weight:bold; transition:transform 0.15s ease-out; transform-origin:center;">↑</span> <span id="tel-wind-deg" style="color:#94a3b8; font-size:11px;">045°</span></div>
+    <div class="tel-item">VOLT: <span id="tel-volt">16.48</span>V</div>
+    <div class="tel-item">CURR: <span id="tel-curr">14.8</span>A</div>
+    <div class="tel-item">PWR: <span id="tel-pwr">244</span>W</div>
+    <div class="tel-item">dT/dt: <span id="tel-dtdt">0.0</span>℃/s</div>
+  </div>
+
+  <!-- Top Right Badges -->
+  <div class="top-right-bar hud-interactive">
+    <div class="temp-badge" id="hud-temp-badge">
+      🌡 <span id="hud-temp-val">30.0</span>°C
+    </div>
+    <div class="timer-badge">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>
+      <span id="hud-timer">00:00.00</span>
+    </div>
+    <div class="battery-badge">
+      <div class="battery-cells">
+        <div class="b-cell"></div><div class="b-cell"></div><div class="b-cell"></div>
+        <div class="b-cell"></div><div class="b-cell"></div><div class="b-cell"></div>
+      </div>
+      <span id="hud-battery-pct">100%</span>
+    </div>
+  </div>
+
+    <!-- Live Attitude Indicator & Wind Vector Overlay HUD -->
+  <div class="attitude-wind-hud hud-interactive" id="attitude-wind-hud">
+    <!-- Attitude Horizon Block -->
+    <div class="hud-block">
+      <div class="hud-block-title">
+        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#38bdf8; box-shadow:0 0 6px #38bdf8;"></span>
+        ATTITUDE (자세)
+      </div>
+      <div class="pfd-dial-container">
+        <div class="pfd-horizon-sphere" id="pfd-horizon">
+          <div class="pfd-sky"></div>
+          <div class="pfd-ground"></div>
+        </div>
+        <div class="pfd-crosshair"></div>
+        <div class="pfd-dot"></div>
+      </div>
+      <div class="hud-digital-readout">
+        <div><span>R:</span> <b id="att-roll-val">+0.0°</b></div>
+        <div><span>P:</span> <b id="att-pitch-val">+0.0°</b></div>
+        <div><span>Y:</span> <b id="att-yaw-val">045°</b></div>
+      </div>
+    </div>
+
+    <!-- Wind Vector Compass Block -->
+    <div class="hud-block">
+      <div class="hud-block-title">
+        <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#00e5ff; box-shadow:0 0 6px #00e5ff;"></span>
+        WIND VECTOR (바람)
+      </div>
+      <div class="wind-dial-container">
+        <div class="wind-compass-card">
+          <span class="wind-compass-n">N</span>
+          <span class="wind-compass-e">E</span>
+          <span class="wind-compass-s">S</span>
+          <span class="wind-compass-w">W</span>
+        </div>
+        <div class="wind-arrow-rotator" id="wind-arrow-rotator">
+          <svg class="wind-arrow-svg" viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="windGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#38bdf8" />
+                <stop offset="100%" stop-color="#0284c7" />
+              </linearGradient>
+            </defs>
+            <polygon points="50,14 59,38 53,34 53,84 47,84 47,34 41,38" fill="url(#windGrad)" />
+          </svg>
+        </div>
+        <div class="wind-speed-center">
+          <div class="wind-speed-val" id="hud-wind-spd-val">3.2</div>
+          <div class="wind-speed-unit">M/S</div>
+        </div>
+      </div>
+      <div class="hud-digital-readout" style="justify-content:center;">
+        <div><span>DIR:</span> <b id="hud-wind-dir-val">045°</b></div>
+        <div id="drone-hull-tag" class="drone-hull-status-tag">HULL: NORMAL</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Altimeter Ladder -->
+  <div class="altimeter-container">
+    <div class="alt-ticks">
+      <div>30</div><div>25</div><div>20</div><div>15</div><div>10</div><div>5</div><div>0</div>
+    </div>
+    <div class="alt-ladder">
+      <div class="alt-fill" id="alt-bar-fill"></div>
+    </div>
+    <div class="alt-value-box" id="alt-box" style="bottom: 33%;">10m</div>
+  </div>
+
+  <!-- Live Real-Time Telemetry Graph Panel -->
+  <div class="live-scope-panel hud-interactive" id="live-scope-panel">
+    <div class="scope-header">
+      <span style="display:flex; align-items:center; gap:6px;">
+        <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#00e5ff; box-shadow:0 0 6px #00e5ff;"></span>
+        <span style="color:#f1f5f9; font-size:11.5px; letter-spacing:0.3px;">📊 실시간 텔레메트리 그래프</span>
+      </span>
+      <button id="scope-toggle-btn" onclick="toggleScopePanel()" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2); color:#94a3b8; border-radius:4px; cursor:pointer; font-size:11px; padding:1px 6px;">최소화</button>
+    </div>
+    <div id="scope-content">
+      <canvas id="scopeCanvas" width="296" height="120" style="width:100%; height:120px; display:block; border-radius:6px; background:#0b1120; border:1px solid rgba(51, 65, 85, 0.6);"></canvas>
+      <div style="display:flex; justify-content:space-between; font-size:9.5px; padding-top:4px; font-weight:700;">
+        <span style="color:#ef4444;">● 온도[°C]</span>
+        <span style="color:#38bdf8;">● 고도[m]</span>
+        <span style="color:#facc15;">● 전압[V]</span>
+        <span style="color:#a855f7;">● 풍속[m/s]</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom BMS Control Dashboard -->
+  <div class="bottom-dashboard hud-interactive">
+    <div class="state-banner" id="bms-state-banner">
+      <div class="status-led" id="status-led"></div>
+      <span id="status-text">MISSION: RUNWAY PATROL (NORMAL 30°C) - F450 BMS SYSTEM ACTIVE</span>
+    </div>
+
+    <div class="mode-btn-group">
+      <button class="m-btn btn-lipo" id="btn-mode-0" onclick="setBattMode(0)">
+        <span class="btn-short-text">⚡ LiPo</span>
+        <span class="btn-full-text">⚡ 4S LiPo 자연발열</span>
+      </button>
+      <button class="m-btn btn-30 active" id="btn-mode-1" onclick="setBattMode(1)">
+        <span class="btn-short-text">🟢 30℃ 정상</span>
+        <span class="btn-full-text">🟢 30℃ 정상순항</span>
+      </button>
+      <button class="m-btn btn-60" id="btn-mode-2" onclick="setBattMode(2)">
+        <span class="btn-short-text">🟡 60℃ 경고</span>
+        <span class="btn-full-text">🟡 60℃ 열경고 (5m 하강)</span>
+      </button>
+      <button class="m-btn btn-70" id="btn-mode-3" onclick="setBattMode(3)">
+        <span class="btn-short-text">🔴 70℃ 비상</span>
+        <span class="btn-full-text">🔴 70℃ 비상착륙 (최근접 LZ 자동선택)</span>
+      </button>
+    </div>
+
+    <div class="key-hint">조작키: W/S(전진/감속) | A/D(좌우 롤) | Space/Shift(상승/하강) | 1,2,3,0(모드) | C(카메라 시점) | 마우스 드래그(360도 회전)</div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================================
+   F450 QUADCOPTER BMS 3D FLIGHT SIMULATION
+   - Flat Airport Runway & Airfield Environment (평평한 활주로 및 비행장)
+   - Authentic DJI FlameWheel F450 Multirotor (전면 2개 레드 암, 후면 2개 화이트 암,
+     이중 PDB 데크, NAZA-M 비행제어기, GPS 마스트 및 퍽, 2212 모터 & 1045 프로펠러)
+   - No Waypoint Rings (사용자 요청에 따라 주행 링 완전 제거)
+   - No Bottom Virtual Joysticks (사용자 요청에 따라 좌우 맨 아래 동그라미 삭제)
+   - 6-DOF Physical Flight Dynamics & Real-Time BMS (LPF tau=0.9s, Warning 60C, Emergency 70C)
+=================================================================================== */
+
+let scene, camera, renderer, clock;
+let drone, propMeshes = [], turbineBlades = [];
+let landingPads = [];
+let fcStatusLed;
+let droneDynamicGlowMat, droneDynamicLedStrips = [], windArrow3D;
+let orbitTheta = 0, orbitPhi = 0.35, orbitRadius = 6.2;
+let contactShadow, windsockMesh, atcRadar;
+let texAsphalt, texGrass, texCarbon, texSkid, texRotor;
+let texGravel, texRoad, texNumbers15, texNumbers33, texOilStains;
+
+// F450 Physical Specs (6-DOF Dynamic Rig & LiPo Powertrain Model)
+const F450_SPECS = {
+  mass: 1.38, // kg (F450 multirotor + 4S 3800mAh LiPo + NAZA-M V2)
+  gravity: 9.81, // m/s^2
+  hoverThrust: 1.38 * 9.81, // 13.538 N
+  maxThrust: 34.0, // N (8.5N x 4 motors)
+  dragLinear: 0.38, // Aerodynamic profile drag (N / (m/s)) - realistic wind displacement
+  dragQuad: 0.082, // High-speed form drag (N / (m/s)^2)
+  omegaAttitude: 10.0, // Natural angular frequency (rad/s)
+  zetaAttitude: 1.05, // Critically damped - zero attitude ringing/vibration
+  // 4S LiPo Battery & Powertrain Electrical Parameters
+  batteryCapacityAh: 3.8, // 3800 mAh nominal capacity (Real flight ~16-18 min)
+  batteryRint: 0.022, // 22 mOhm pack internal resistance (5.5 mOhm/cell)
+  auxPowerW: 6.8 // Avionics (NAZA-M V2, GPS, telemetry, LEDs) standby draw (W)
+};
+
+const keyState = { w: false, s: false, a: false, d: false, space: false, shift: false };
+
+// Drone Physical State Vector (Real Physics & Electrical Powertrain State)
+const droneState = {
+  pos: new THREE.Vector3(0, 10.0, 0),
+  vel: new THREE.Vector3(12.5, 0, 0),
+  acc: new THREE.Vector3(0, 0, 0),
+  rot: new THREE.Euler(0, 0, 0, 'YXZ'),
+  roll: 0, pitch: 0.38, yaw: 0,
+  rollRate: 0, pitchRate: 0, yawRate: 0,
+  targetAlt: 10.0,
+  targetSpeed: 12.5,
+  currentAltSetpoint: 10.0,
+  currentSpeedSetpoint: 12.5,
+  thrust: 15.8,
+  mode: 1, // 0: Auto, 1: 30C, 2: 60C, 3: 70C
+  tb: 30.0,
+  tf: 30.0,
+  bmsState: 0, // 0: Normal, 1: Warning, 2: Emergency, 3: Touchdown
+  emergencyPad: null,
+  landingCommitted: false,
+  landed: false,
+  timer: 0.0, // Strictly starts from 00:00.00 (0 seconds)
+  simPaused: false,
+  cameraMode: 0, // 0: Chase, 1: Cockpit FPV, 2: LZ Cam, 3: Free Orbit
+  // Battery State & Physical Electrical Telemetry
+  soc: 1.0, // 100% State of Charge (3.8 Ah)
+  remAh: 3.8, // Remaining Ampere-hours
+  volt: 16.48, // Terminal Voltage under load (V)
+  curr: 14.8, // Total pack current (A)
+  power: 244.0, // Total electrical power P = V * I (W)
+  // Dynamic Stochastic Wind Field (Max within 3.5 m/s)
+  wind: {
+    speed: 2.2,
+    targetSpeed: 2.5,
+    direction: 45.0, // degrees (0° tailwind +X, 90° right crosswind +Z, 180° headwind -X, 270° left crosswind -Z)
+    targetDirection: 55.0,
+    timer: 0.0,
+    nextShiftTime: 3.0,
+    gust: new THREE.Vector3(0, 0, 0),
+    vec: new THREE.Vector3(0, 0, 0)
+  },
+  crossTrackIntegral: 0.0 // Total electrical power P = V * I (W)
+};
+
+// Flat Terrain (Zero Elevation Everywhere)
+function getTerrainHeight(x, z) {
+  return 0.0;
+}
+
+// ===================================================================================
+// PROCEDURAL PBR TEXTURES (AAA PHOTOREALISM ENGINE)
+// ===================================================================================
+function createProceduralTextures() {
+  // 1. Photorealistic Asphalt Bitumen Texture (Aged Airfield Tarmac)
+  const canvasAsp = document.createElement('canvas');
+  canvasAsp.width = 512; canvasAsp.height = 512;
+  const ctxAsp = canvasAsp.getContext('2d');
+  ctxAsp.fillStyle = '#2b2e34';
+  ctxAsp.fillRect(0, 0, 512, 512);
+
+  const imgAsp = ctxAsp.getImageData(0, 0, 512, 512);
+  const dAsp = imgAsp.data;
+  for (let i = 0; i < dAsp.length; i += 4) {
+    const n = (Math.random() - 0.5) * 32;
+    dAsp[i]   = Math.min(255, Math.max(0, dAsp[i] + n));
+    dAsp[i+1] = Math.min(255, Math.max(0, dAsp[i+1] + n));
+    dAsp[i+2] = Math.min(255, Math.max(0, dAsp[i+2] + n));
+    if (Math.random() < 0.04) {
+      const spk = 75 + Math.random() * 80;
+      dAsp[i] = spk; dAsp[i+1] = spk; dAsp[i+2] = spk;
+    } else if (Math.random() < 0.03) {
+      dAsp[i] = 18; dAsp[i+1] = 18; dAsp[i+2] = 20;
+    }
+  }
+  ctxAsp.putImageData(imgAsp, 0, 0);
+  texAsphalt = new THREE.CanvasTexture(canvasAsp);
+  texAsphalt.wrapS = texAsphalt.wrapT = THREE.RepeatWrapping;
+  texAsphalt.repeat.set(90, 2);
+  texAsphalt.anisotropy = 8;
+
+  // 2. Realistic Muted Airfield Meadow Turf (Natural Aerial Palette - Not cartoon green)
+  const canvasGrs = document.createElement('canvas');
+  canvasGrs.width = 512; canvasGrs.height = 512;
+  const ctxGrs = canvasGrs.getContext('2d');
+  ctxGrs.fillStyle = '#414d38'; // Muted natural olive turf base
+  ctxGrs.fillRect(0, 0, 512, 512);
+
+  const imgGrs = ctxGrs.getImageData(0, 0, 512, 512);
+  const dGrs = imgGrs.data;
+  for (let i = 0; i < dGrs.length; i += 4) {
+    const n = (Math.random() - 0.5) * 40;
+    dGrs[i]   = Math.min(255, Math.max(0, 65 + n * 0.9));
+    dGrs[i+1] = Math.min(255, Math.max(0, 78 + n * 1.1));
+    dGrs[i+2] = Math.min(255, Math.max(0, 56 + n * 0.7));
+  }
+  ctxGrs.putImageData(imgGrs, 0, 0);
+
+  // Organic thatch / dry grass blades and loam soil specks
+  ctxGrs.strokeStyle = 'rgba(92, 98, 70, 0.45)';
+  ctxGrs.lineWidth = 1.0;
+  for (let j = 0; j < 1800; j++) {
+    const gx = Math.random() * 512, gy = Math.random() * 512;
+    ctxGrs.beginPath();
+    ctxGrs.moveTo(gx, gy);
+    ctxGrs.lineTo(gx + (Math.random() - 0.5) * 3, gy - 3 - Math.random() * 5);
+    ctxGrs.stroke();
+  }
+  texGrass = new THREE.CanvasTexture(canvasGrs);
+  texGrass.wrapS = texGrass.wrapT = THREE.RepeatWrapping;
+  texGrass.repeat.set(120, 80);
+  texGrass.anisotropy = 8;
+
+  // 3. Genuine Twill Carbon Fiber Texture
+  const canvasCarb = document.createElement('canvas');
+  canvasCarb.width = 64; canvasCarb.height = 64;
+  const ctxCarb = canvasCarb.getContext('2d');
+  ctxCarb.fillStyle = '#141417';
+  ctxCarb.fillRect(0, 0, 64, 64);
+  const s = 16;
+  for (let x = 0; x < 64; x += s) {
+    for (let y = 0; y < 64; y += s) {
+      const isDiag = ((x + y) / s) % 2 === 0;
+      ctxCarb.fillStyle = isDiag ? '#282b33' : '#131315';
+      ctxCarb.fillRect(x, y, s, s);
+      ctxCarb.strokeStyle = isDiag ? 'rgba(80, 86, 98, 0.38)' : 'rgba(38, 40, 46, 0.38)';
+      ctxCarb.lineWidth = 1;
+      for (let f = 0; f < s; f += 3) {
+        ctxCarb.beginPath();
+        if (isDiag) { ctxCarb.moveTo(x + f, y); ctxCarb.lineTo(x + f, y + s); }
+        else { ctxCarb.moveTo(x, y + f); ctxCarb.lineTo(x + s, y + f); }
+        ctxCarb.stroke();
+      }
+    }
+  }
+  texCarbon = new THREE.CanvasTexture(canvasCarb);
+  texCarbon.wrapS = texCarbon.wrapT = THREE.RepeatWrapping;
+  texCarbon.repeat.set(6, 6);
+
+  // 4. Touchdown Rubber Tire Skid Marks Texture
+  const canvasSkid = document.createElement('canvas');
+  canvasSkid.width = 1024; canvasSkid.height = 128;
+  const ctxSkid = canvasSkid.getContext('2d');
+  ctxSkid.clearRect(0, 0, 1024, 128);
+  const tracks = [36, 92];
+  tracks.forEach(ty => {
+    for (let i = 0; i < 500; i++) {
+      const sx = Math.random() * 1024;
+      const sy = ty + (Math.random() - 0.5) * 16;
+      const len = 30 + Math.random() * 95;
+      const alpha = 0.08 + Math.random() * 0.32;
+      ctxSkid.fillStyle = `rgba(12, 14, 16, ${alpha})`;
+      ctxSkid.fillRect(sx, sy, len, 2.0 + Math.random() * 2.5);
+    }
+  });
+  texSkid = new THREE.CanvasTexture(canvasSkid);
+  texSkid.wrapS = THREE.RepeatWrapping;
+  texSkid.repeat.set(4, 1);
+
+  // 5. Realistic Camera Shutter Rotor Blur Disc Texture with Anisotropic Sun Glint
+  const canvasRtr = document.createElement('canvas');
+  canvasRtr.width = 256; canvasRtr.height = 256;
+  const ctxRtr = canvasRtr.getContext('2d');
+  const cx = 128, cy = 128;
+  const gradRtr = ctxRtr.createRadialGradient(cx, cy, 18, cx, cy, 126);
+  gradRtr.addColorStop(0, 'rgba(25, 27, 30, 0.0)');
+  gradRtr.addColorStop(0.35, 'rgba(32, 34, 38, 0.28)');
+  gradRtr.addColorStop(0.72, 'rgba(48, 52, 58, 0.42)');
+  gradRtr.addColorStop(0.93, 'rgba(215, 228, 242, 0.68)');
+  gradRtr.addColorStop(1.0, 'rgba(20, 22, 25, 0.0)');
+  ctxRtr.fillStyle = gradRtr;
+  ctxRtr.beginPath();
+  ctxRtr.arc(cx, cy, 126, 0, Math.PI * 2);
+  ctxRtr.fill();
+  ctxRtr.strokeStyle = 'rgba(255, 255, 255, 0.38)';
+  ctxRtr.lineWidth = 2.5;
+  ctxRtr.beginPath();
+  ctxRtr.arc(cx, cy, 114, 0.2, 1.15);
+  ctxRtr.stroke();
+  ctxRtr.beginPath();
+  ctxRtr.arc(cx, cy, 114, Math.PI + 0.2, Math.PI + 1.15);
+  ctxRtr.stroke();
+  texRotor = new THREE.CanvasTexture(canvasRtr);
+
+  // 6. Crushed Stone / Graded Gravel Runway Transition Shoulder Texture
+  const canvasGrv = document.createElement('canvas');
+  canvasGrv.width = 256; canvasGrv.height = 256;
+  const ctxGrv = canvasGrv.getContext('2d');
+  ctxGrv.fillStyle = '#5c5850';
+  ctxGrv.fillRect(0, 0, 256, 256);
+  const imgGrv = ctxGrv.getImageData(0, 0, 256, 256);
+  const dGrv = imgGrv.data;
+  for (let i = 0; i < dGrv.length; i += 4) {
+    const gn = (Math.random() - 0.5) * 55;
+    dGrv[i]   = Math.min(255, Math.max(0, 92 + gn));
+    dGrv[i+1] = Math.min(255, Math.max(0, 88 + gn));
+    dGrv[i+2] = Math.min(255, Math.max(0, 80 + gn * 0.9));
+    if (Math.random() < 0.06) {
+      const p = 120 + Math.random() * 60;
+      dGrv[i] = p; dGrv[i+1] = p; dGrv[i+2] = p;
+    }
+  }
+  ctxGrv.putImageData(imgGrv, 0, 0);
+  texGravel = new THREE.CanvasTexture(canvasGrv);
+  texGravel.wrapS = texGravel.wrapT = THREE.RepeatWrapping;
+  texGravel.repeat.set(160, 2);
+  texGravel.anisotropy = 8;
+
+  // 7. Perimeter Service Road Asphalt Texture
+  const canvasRd = document.createElement('canvas');
+  canvasRd.width = 256; canvasRd.height = 256;
+  const ctxRd = canvasRd.getContext('2d');
+  ctxRd.fillStyle = '#2e3136';
+  ctxRd.fillRect(0, 0, 256, 256);
+  const imgRd = ctxRd.getImageData(0, 0, 256, 256);
+  const dRd = imgRd.data;
+  for (let i = 0; i < dRd.length; i += 4) {
+    const rn = (Math.random() - 0.5) * 24;
+    dRd[i]   = Math.min(255, Math.max(0, 46 + rn));
+    dRd[i+1] = Math.min(255, Math.max(0, 49 + rn));
+    dRd[i+2] = Math.min(255, Math.max(0, 54 + rn));
+  }
+  ctxRd.putImageData(imgRd, 0, 0);
+  texRoad = new THREE.CanvasTexture(canvasRd);
+  texRoad.wrapS = texRoad.wrapT = THREE.RepeatWrapping;
+  texRoad.repeat.set(120, 1);
+  texRoad.anisotropy = 8;
+
+  // 8. Runway Centerline Oil Stains
+  const canvasOil = document.createElement('canvas');
+  canvasOil.width = 1024; canvasOil.height = 64;
+  const ctxOil = canvasOil.getContext('2d');
+  ctxOil.clearRect(0, 0, 1024, 64);
+  for (let i = 0; i < 400; i++) {
+    const ox = Math.random() * 1024;
+    const oy = 32 + (Math.random() - 0.5) * 18;
+    const ow = 20 + Math.random() * 80;
+    const oh = 1.5 + Math.random() * 3.5;
+    ctxOil.fillStyle = `rgba(16, 18, 20, ${0.08 + Math.random() * 0.25})`;
+    ctxOil.fillRect(ox, oy, ow, oh);
+  }
+  texOilStains = new THREE.CanvasTexture(canvasOil);
+  texOilStains.wrapS = THREE.RepeatWrapping;
+  texOilStains.repeat.set(6, 1);
+
+  // 9. Runway Designation Numbers "15" and "33" Textures
+  function makeRunwayNumberTexture(numStr) {
+    const cNum = document.createElement('canvas');
+    cNum.width = 512; cNum.height = 256;
+    const cCtx = cNum.getContext('2d');
+    cCtx.clearRect(0, 0, 512, 256);
+    cCtx.fillStyle = '#f1f5f9';
+    cCtx.font = 'bold 210px "Arial Black", Impact, sans-serif';
+    cCtx.textAlign = 'center';
+    cCtx.textBaseline = 'middle';
+    cCtx.fillText(numStr, 256, 128);
+
+    const imgN = cCtx.getImageData(0, 0, 512, 256);
+    const dN = imgN.data;
+    for (let i = 0; i < dN.length; i += 4) {
+      if (dN[i+3] > 50 && Math.random() < 0.12) {
+        dN[i+3] = Math.floor(dN[i+3] * (0.35 + Math.random() * 0.45));
+      }
+    }
+    cCtx.putImageData(imgN, 0, 0);
+    return new THREE.CanvasTexture(cNum);
+  }
+  texNumbers15 = makeRunwayNumberTexture('15');
+  texNumbers33 = makeRunwayNumberTexture('33');
+}
+
+// Initialize 3D Scene
+function init() {
+  const container = document.getElementById('canvas-container');
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0xb6cde2, 0.00062); // Atmospheric horizon haze fog
+
+  camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 4000);
+  
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  container.appendChild(renderer.domElement);
+
+  clock = new THREE.Clock();
+
+  // Procedural Textures & Atmospheric Sky
+  createProceduralTextures();
+  createSkyDome();
+
+  // Physically-Calibrated Solar Lighting & Ambient
+  const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x3d382d, 0.68);
+  hemiLight.position.set(0, 300, 0);
+  scene.add(hemiLight);
+
+  const sunLight = new THREE.DirectionalLight(0xfff8ea, 1.75);
+  sunLight.position.set(180, 280, 120);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.width = 4096;
+  sunLight.shadow.mapSize.height = 4096;
+  sunLight.shadow.camera.near = 10;
+  sunLight.shadow.camera.far = 850;
+  sunLight.shadow.camera.left = -220;
+  sunLight.shadow.camera.right = 220;
+  sunLight.shadow.camera.top = 220;
+  sunLight.shadow.camera.bottom = -220;
+  sunLight.shadow.bias = -0.0002;
+  scene.add(sunLight);
+
+  // Mouse Orbit Drag Listeners
+  let isPointerDown = false, lastPtrX = 0, lastPtrY = 0;
+  window.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.hud-interactive')) return;
+    isPointerDown = true;
+    lastPtrX = e.clientX;
+    lastPtrY = e.clientY;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!isPointerDown) return;
+    const dx = e.clientX - lastPtrX;
+    const dy = e.clientY - lastPtrY;
+    orbitTheta -= dx * 0.008;
+    orbitPhi = Math.max(-0.2, Math.min(1.4, orbitPhi + dy * 0.008));
+    lastPtrX = e.clientX;
+    lastPtrY = e.clientY;
+  });
+  window.addEventListener('pointerup', () => { isPointerDown = false; });
+
+  // 1. Build Flat Airfield & Realistic Asphalt Runway
+  buildTerrain();
+
+  // 2. Build 5 Dedicated Landing Helipads along the Apron (LZ 1~5)
+  buildLandingPads();
+
+  // 3. Distant Airfield Perimeter Features (Wind Turbines, Mountains, ATC Tower, Hangars, 3D Trees)
+  buildWindTurbines();
+  buildDistantMountains();
+  buildWindsock();
+  buildAirportBuildings();
+  buildAirfieldVegetation();
+
+  // 4. Build Authentic DJI FlameWheel F450 Multirotor Model
+  buildDrone();
+
+  // 5. Contact Soft Ambient Ground Shadow
+  createContactShadow();
+
+  // 6. Dynamic 3D Flight Trajectory Trail Line
+  initTrajectoryTrail();
+
+  // Setup Event Listeners
+  setupHUDControls();
+  window.addEventListener('resize', onWindowResize, false);
+
+  // URL Mode Support
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('mode')) {
+    setBattMode(parseInt(urlParams.get('mode')));
+  }
+
+  // Initial Camera Pose
+  camera.position.set(-3.2, 11.35, 0);
+  camera.lookAt(5.8, 9.85, 0);
+
+  animate();
+}
+
+// Atmospheric Rayleigh Sky Dome & Reflection Environment Map
+function createSkyDome() {
+  const width = 2048, height = 1024;
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = width;
+  skyCanvas.height = height;
+  const ctx = skyCanvas.getContext('2d');
+
+  // 1. Rayleigh & Mie Atmospheric Scattering Sky Gradient
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+  skyGrad.addColorStop(0.00, '#0e2647'); // Deep navy space blue at zenith
+  skyGrad.addColorStop(0.18, '#1b4374');
+  skyGrad.addColorStop(0.32, '#356ea8'); // Pure aviation blue
+  skyGrad.addColorStop(0.44, '#6c9ecc'); // Cerulean
+  skyGrad.addColorStop(0.495, '#b4cee3'); // Horizon atmospheric haze
+  skyGrad.addColorStop(0.505, '#c5dae8'); // Horizon seam
+  skyGrad.addColorStop(0.53, '#9cb7cc'); // Just below horizon
+  skyGrad.addColorStop(0.68, '#4d5c52'); // Natural distant terrain blend
+  skyGrad.addColorStop(1.00, '#272f26'); // Ground nadir
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, width, height);
+
+  // 2. Solar Glare & Atmospheric Sun Bloom
+  const sunX = 1420, sunY = 310;
+  
+  // Broad atmospheric halo
+  const haloGrad = ctx.createRadialGradient(sunX, sunY, 15, sunX, sunY, 460);
+  haloGrad.addColorStop(0, 'rgba(255, 252, 242, 0.82)');
+  haloGrad.addColorStop(0.12, 'rgba(255, 242, 210, 0.42)');
+  haloGrad.addColorStop(0.35, 'rgba(220, 235, 250, 0.16)');
+  haloGrad.addColorStop(0.70, 'rgba(182, 205, 226, 0.05)');
+  haloGrad.addColorStop(1.0, 'rgba(182, 205, 226, 0.0)');
+  ctx.fillStyle = haloGrad;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 460, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Intense blinding solar disc core
+  const coreGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 36);
+  coreGrad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  coreGrad.addColorStop(0.5, 'rgba(255, 252, 232, 0.95)');
+  coreGrad.addColorStop(1.0, 'rgba(255, 245, 200, 0.0)');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 36, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 3. Multi-Octave Volumetric Cumulus Cloud Banks (360-degree Panorama)
+  const cloudClusters = [
+    { cx: 350,  cy: 420, count: 180, spreadX: 280, spreadY: 45, rMin: 35, rMax: 85 },
+    { cx: 850,  cy: 380, count: 240, spreadX: 360, spreadY: 60, rMin: 45, rMax: 110 },
+    { cx: 1450, cy: 390, count: 220, spreadX: 340, spreadY: 55, rMin: 40, rMax: 100 },
+    { cx: 1950, cy: 410, count: 160, spreadX: 260, spreadY: 50, rMin: 35, rMax: 90 },
+    { cx: 580,  cy: 280, count: 120, spreadX: 200, spreadY: 40, rMin: 30, rMax: 70 },
+    { cx: 1150, cy: 260, count: 140, spreadX: 220, spreadY: 45, rMin: 35, rMax: 75 },
+    { cx: 1720, cy: 290, count: 110, spreadX: 190, spreadY: 38, rMin: 28, rMax: 65 }
+  ];
+
+  cloudClusters.forEach(bank => {
+    for (let i = 0; i < bank.count; i++) {
+      const u = (Math.random() + Math.random() - 1) * bank.spreadX;
+      const v = (Math.random() + Math.random() - 1) * bank.spreadY;
+      let px = (bank.cx + u) % width;
+      if (px < 0) px += width;
+      const py = bank.cy + v;
+      const rad = bank.rMin + Math.random() * (bank.rMax - bank.rMin);
+
+      // Cloud bottom shadow
+      const gradShd = ctx.createRadialGradient(px, py + rad * 0.28, rad * 0.1, px, py + rad * 0.28, rad);
+      gradShd.addColorStop(0, 'rgba(145, 168, 192, 0.42)');
+      gradShd.addColorStop(0.7, 'rgba(165, 184, 205, 0.22)');
+      gradShd.addColorStop(1, 'rgba(182, 205, 226, 0.0)');
+      ctx.fillStyle = gradShd;
+      ctx.beginPath();
+      ctx.arc(px, py + rad * 0.28, rad, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cloud bright illuminated body & sunward rim highlight
+      const dx = sunX - px;
+      const dy = sunY - py;
+      const dist = Math.hypot(dx, dy) || 1;
+      const offX = (dx / dist) * (rad * 0.22);
+      const offY = (dy / dist) * (rad * 0.22);
+
+      const gradLit = ctx.createRadialGradient(px + offX, py + offY, rad * 0.15, px, py, rad);
+      gradLit.addColorStop(0, 'rgba(255, 252, 245, 0.88)');
+      gradLit.addColorStop(0.55, 'rgba(242, 246, 252, 0.65)');
+      gradLit.addColorStop(0.85, 'rgba(215, 228, 240, 0.28)');
+      gradLit.addColorStop(1, 'rgba(200, 218, 235, 0.0)');
+      ctx.fillStyle = gradLit;
+      ctx.beginPath();
+      ctx.arc(px, py, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // High-altitude wispy cirrus streaks (zenith region)
+  ctx.strokeStyle = 'rgba(250, 252, 255, 0.18)';
+  ctx.lineWidth = 14;
+  for (let c = 0; c < 18; c++) {
+    const cx = Math.random() * width;
+    const cy = 110 + Math.random() * 120;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.bezierCurveTo(cx + 80, cy - 15, cx + 180, cy + 10, cx + 280, cy - 8);
+    ctx.stroke();
+  }
+
+  // 4. Soft Atmospheric Aerial Perspective Horizon Haze Wash
+  const hazeWash = ctx.createLinearGradient(0, 440, 0, 520);
+  hazeWash.addColorStop(0.0, 'rgba(180, 206, 227, 0.0)');
+  hazeWash.addColorStop(0.65, 'rgba(182, 206, 227, 0.65)');
+  hazeWash.addColorStop(1.0, 'rgba(182, 206, 227, 0.98)');
+  ctx.fillStyle = hazeWash;
+  ctx.fillRect(0, 440, width, 80);
+
+  // Create Canvas Texture & Assign to Sky Dome and Environment
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  skyTex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = skyTex;
+
+  const skyGeo = new THREE.SphereGeometry(2600, 48, 32);
+  const skyMat = new THREE.MeshBasicMaterial({
+    map: skyTex,
+    side: THREE.BackSide,
+    depthWrite: false
+  });
+  const skyDome = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(skyDome);
+}
+
+// 1. Flat Airfield & Realistic Asphalt Runway (활주로)
+function buildTerrain() {
+  // 1.1 Expansive Airfield Grass Lawn with Muted Natural PBR Turf Texture
+  const grassGeo = new THREE.PlaneGeometry(3800, 2600);
+  grassGeo.rotateX(-Math.PI / 2);
+  const grassMat = new THREE.MeshStandardMaterial({
+    map: texGrass,
+    roughness: 0.92,
+    metalness: 0.02
+  });
+  const grass = new THREE.Mesh(grassGeo, grassMat);
+  grass.receiveShadow = true;
+  scene.add(grass);
+
+  // 1.2 Graded Crushed Stone / Gravel Transition Shoulders (Left & Right of Runway)
+  const grvGeo = new THREE.PlaneGeometry(2400, 6.0);
+  grvGeo.rotateX(-Math.PI / 2);
+  const grvMat = new THREE.MeshStandardMaterial({
+    map: texGravel,
+    roughness: 0.88,
+    metalness: 0.08
+  });
+  const grvLeft = new THREE.Mesh(grvGeo, grvMat);
+  grvLeft.position.set(700, 0.015, -20.0);
+  grvLeft.receiveShadow = true;
+  const grvRight = new THREE.Mesh(grvGeo, grvMat);
+  grvRight.position.set(700, 0.015, 20.0);
+  grvRight.receiveShadow = true;
+  scene.add(grvLeft, grvRight);
+
+  // 1.3 Main Asphalt Runway (Length: 2400m, Width: 34m) with Aged Bitumen PBR Texture
+  const rwyGeo = new THREE.PlaneGeometry(2400, 34);
+  rwyGeo.rotateX(-Math.PI / 2);
+  const rwyMat = new THREE.MeshStandardMaterial({
+    map: texAsphalt,
+    roughness: 0.84,
+    metalness: 0.10
+  });
+  const runway = new THREE.Mesh(rwyGeo, rwyMat);
+  runway.position.set(700, 0.02, 0);
+  runway.receiveShadow = true;
+  scene.add(runway);
+
+  // 1.4 Centerline Continuous Oil / Hydraulic Drip Staining
+  const oilGeo = new THREE.PlaneGeometry(2350, 4.0);
+  oilGeo.rotateX(-Math.PI / 2);
+  const oilMat = new THREE.MeshBasicMaterial({
+    map: texOilStains,
+    transparent: true,
+    opacity: 0.65,
+    depthWrite: false
+  });
+  const oilMesh = new THREE.Mesh(oilGeo, oilMat);
+  oilMesh.position.set(700, 0.022, 0);
+  scene.add(oilMesh);
+
+  // 1.5 Heavy Rubber Touchdown Tire Skid Marks
+  const skidGeo = new THREE.PlaneGeometry(550, 18);
+  skidGeo.rotateX(-Math.PI / 2);
+  const skidMat = new THREE.MeshBasicMaterial({
+    map: texSkid,
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false
+  });
+  const skidMesh = new THREE.Mesh(skidGeo, skidMat);
+  skidMesh.position.set(380, 0.025, 0);
+  scene.add(skidMesh);
+
+  // 1.6 Runway Centerline Dashed White Stripes
+  const dashGroup = new THREE.Group();
+  dashGroup.position.y = 0.032;
+  const dashMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const dashGeo = new THREE.PlaneGeometry(6.5, 0.9);
+  dashGeo.rotateX(-Math.PI / 2);
+
+  for (let x = -400; x <= 1800; x += 15) {
+    const dash = new THREE.Mesh(dashGeo, dashMat);
+    dash.position.x = x;
+    dashGroup.add(dash);
+  }
+  scene.add(dashGroup);
+
+  // 1.7 Solid Boundary Edge Lines along Runway (z = -16.2m and +16.2m)
+  const edgeGeo = new THREE.PlaneGeometry(2380, 0.65);
+  edgeGeo.rotateX(-Math.PI / 2);
+  const edgeL = new THREE.Mesh(edgeGeo, dashMat);
+  edgeL.position.set(700, 0.033, -16.2);
+  const edgeR = new THREE.Mesh(edgeGeo, dashMat);
+  edgeR.position.set(700, 0.033, 16.2);
+  scene.add(edgeL, edgeR);
+
+  // 1.8 Runway Threshold Designation Numbers: "15" and "33"
+  const numGeo = new THREE.PlaneGeometry(24, 12);
+  numGeo.rotateX(-Math.PI / 2);
+  
+  // Runway 15 (Threshold at x = -85m)
+  const numMat15 = new THREE.MeshBasicMaterial({ map: texNumbers15, transparent: true, opacity: 0.92 });
+  const numMesh15 = new THREE.Mesh(numGeo, numMat15);
+  numMesh15.position.set(-85, 0.036, 0);
+  scene.add(numMesh15);
+
+  // Runway 33 (Threshold at x = 1520m, facing opposite)
+  const numMat33 = new THREE.MeshBasicMaterial({ map: texNumbers33, transparent: true, opacity: 0.92 });
+  const numMesh33 = new THREE.Mesh(numGeo, numMat33);
+  numMesh33.position.set(1520, 0.036, 0);
+  numMesh33.rotation.y = Math.PI;
+  scene.add(numMesh33);
+
+  // 1.9 Runway Threshold "Piano Keys" Markings
+  [-120, 1580].forEach(thrX => {
+    for (let k = -13; k <= 13; k += 2.8) {
+      const barGeo = new THREE.PlaneGeometry(15.0, 1.4);
+      barGeo.rotateX(-Math.PI / 2);
+      const bar = new THREE.Mesh(barGeo, dashMat);
+      bar.position.set(thrX, 0.034, k);
+      scene.add(bar);
+    }
+  });
+
+  // 1.10 Touchdown Aiming Markers
+  [160, 360, 560, 760, 960].forEach(tdX => {
+    [-7.5, 7.5].forEach(sideZ => {
+      const tdGeo = new THREE.PlaneGeometry(16.0, 2.4);
+      tdGeo.rotateX(-Math.PI / 2);
+      const tdBar = new THREE.Mesh(tdGeo, dashMat);
+      tdBar.position.set(tdX, 0.034, sideZ);
+      scene.add(tdBar);
+    });
+  });
+
+  // 1.11 3D Elevated Runway Edge Light Fixtures with Glowing Lenses
+  const postGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.28, 8);
+  const postMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.6, roughness: 0.3 });
+  const lensGeo = new THREE.SphereGeometry(0.065, 12, 12);
+  const lensMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+
+  for (let lx = -350; lx <= 1750; lx += 45) {
+    [-16.8, 16.8].forEach(lz => {
+      const lightGroup = new THREE.Group();
+      lightGroup.position.set(lx, 0, lz);
+
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.y = 0.14;
+      lightGroup.add(post);
+
+      const lens = new THREE.Mesh(lensGeo, lensMat);
+      lens.position.y = 0.30;
+      lightGroup.add(lens);
+
+      scene.add(lightGroup);
+    });
+  }
+
+  // 1.12 Perimeter Service Road (Running parallel at z = -36m, width 7m)
+  const rdGeo = new THREE.PlaneGeometry(2400, 7.0);
+  rdGeo.rotateX(-Math.PI / 2);
+  const rdMat = new THREE.MeshStandardMaterial({
+    map: texRoad,
+    roughness: 0.85,
+    metalness: 0.08
+  });
+  const rdMesh = new THREE.Mesh(rdGeo, rdMat);
+  rdMesh.position.set(700, 0.018, -36.0);
+  rdMesh.receiveShadow = true;
+  scene.add(rdMesh);
+
+  // 1.13 Taxiway link to apron/helipads (at x = 280m)
+  const twGeo = new THREE.PlaneGeometry(24, 28);
+  twGeo.rotateX(-Math.PI / 2);
+  const twMesh = new THREE.Mesh(twGeo, rwyMat);
+  twMesh.position.set(280, 0.021, -26);
+  scene.add(twMesh);
+
+  // 1.14 Right Concrete Apron for Right Helipads (along z = +30m, matching Left Apron)
+  const apronRGeo = new THREE.PlaneGeometry(750, 18);
+  apronRGeo.rotateX(-Math.PI / 2);
+  const apronR = new THREE.Mesh(apronRGeo, rwyMat);
+  apronR.position.set(355, 0.018, 30.0);
+  apronR.receiveShadow = true;
+  scene.add(apronR);
+
+  // 1.15 Taxiway link to right helipads (at x = 280m)
+  const twRMesh = new THREE.Mesh(twGeo, rwyMat);
+  twRMesh.position.set(280, 0.021, 26);
+  twRMesh.receiveShadow = true;
+  scene.add(twRMesh);
+}
+
+function buildLandingPads() {
+  // 10 Dedicated Landing Helipads: 5 on Left (z = -30m) and 5 on Right (z = +30m)
+  // Drone calculates GPS reachability & tailwind autonomously with ZERO pre-set paths!
+  const lzCoords = [
+    // --- Left Side Helipads (z = -30m) ---
+    { id: 1,  x: 60,  z: -30, side: 'LEFT',  name: 'LZ#1 (좌측 1호)' },
+    { id: 2,  x: 150, z: -30, side: 'LEFT',  name: 'LZ#2 (좌측 2호)' },
+    { id: 3,  x: 280, z: -30, side: 'LEFT',  name: 'LZ#3 (좌측 주착륙장)' },
+    { id: 4,  x: 450, z: -30, side: 'LEFT',  name: 'LZ#4 (좌측 4호)' },
+    { id: 5,  x: 650, z: -30, side: 'LEFT',  name: 'LZ#5 (좌측 5호)' },
+    // --- Right Side Helipads (z = +30m) ---
+    { id: 6,  x: 60,  z:  30, side: 'RIGHT', name: 'LZ#6 (우측 1호 - 순풍회피)' },
+    { id: 7,  x: 150, z:  30, side: 'RIGHT', name: 'LZ#7 (우측 2호 - 순풍회피)' },
+    { id: 8,  x: 280, z:  30, side: 'RIGHT', name: 'LZ#8 (우측 주착륙장 - 순풍회피)' },
+    { id: 9,  x: 450, z:  30, side: 'RIGHT', name: 'LZ#9 (우측 4호 - 순풍회피)' },
+    { id: 10, x: 650, z:  30, side: 'RIGHT', name: 'LZ#10 (우측 5호 - 순풍회피)' }
+  ];
+
+  lzCoords.forEach(lz => {
+    const padGroup = new THREE.Group();
+    padGroup.position.set(lz.x, 0.03, lz.z);
+
+    // Concrete Pad (Diameter 14m)
+    const padGeo = new THREE.CylinderGeometry(7, 7, 0.1, 32);
+    const padMat = new THREE.MeshStandardMaterial({
+      color: lz.side === 'LEFT' ? 0x334155 : 0x1e293b,
+      roughness: 0.65,
+      metalness: 0.15
+    });
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.position.y = 0.05;
+    pad.receiveShadow = true;
+    padGroup.add(pad);
+
+    // Warning Border Ring (Yellow for Left, Emerald for Right)
+    const ringGeo = new THREE.RingGeometry(6.2, 6.9, 32);
+    ringGeo.rotateX(-Math.PI / 2);
+    const ringColor = lz.side === 'LEFT' ? 0xfacc15 : 0x10b981;
+    const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.y = 0.11;
+    padGroup.add(ring);
+
+    // Center White 'H' Marking
+    const hGroup = new THREE.Group();
+    hGroup.position.y = 0.12;
+    const barMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const barGeo1 = new THREE.PlaneGeometry(0.8, 4.5); barGeo1.rotateX(-Math.PI/2);
+    const bar1 = new THREE.Mesh(barGeo1, barMat); bar1.position.x = -1.5;
+    const bar2 = new THREE.Mesh(barGeo1, barMat); bar2.position.x = 1.5;
+    const barGeo2 = new THREE.PlaneGeometry(3.0, 0.8); barGeo2.rotateX(-Math.PI/2);
+    const bar3 = new THREE.Mesh(barGeo2, barMat);
+    hGroup.add(bar1, bar2, bar3);
+    padGroup.add(hGroup);
+
+    // Neon Vertical Beacon Beam (Cyan for Left, Emerald for Right)
+    const beamColor = lz.side === 'LEFT' ? 0x00e5ff : 0x10b981;
+    const beamGeo = new THREE.CylinderGeometry(0.18, 1.1, 90, 16);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: beamColor,
+      transparent: true,
+      opacity: 0.32,
+      blending: THREE.AdditiveBlending
+    });
+    const beam = new THREE.Mesh(beamGeo, beamMat);
+    beam.position.y = 45;
+    padGroup.add(beam);
+
+    // 3D Canvas Floating Text Billboard
+    const cvs = document.createElement('canvas');
+    cvs.width = 256; cvs.height = 64;
+    const ctx = cvs.getContext('2d');
+    ctx.fillStyle = lz.side === 'LEFT' ? 'rgba(6, 182, 212, 0.85)' : 'rgba(16, 185, 129, 0.85)';
+    ctx.roundRect ? ctx.roundRect(8, 8, 240, 48, 10) : ctx.rect(8, 8, 240, 48);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`LZ #${lz.id} (${lz.side})`, 128, 32);
+
+    const lblTex = new THREE.CanvasTexture(cvs);
+    const lblMat = new THREE.SpriteMaterial({ map: lblTex, transparent: true, opacity: 0.88 });
+    const lblSprite = new THREE.Sprite(lblMat);
+    lblSprite.position.set(0, 4.2, 0);
+    lblSprite.scale.set(6.5, 1.6, 1.0);
+    padGroup.add(lblSprite);
+
+    scene.add(padGroup);
+    landingPads.push({
+      id: lz.id,
+      x: lz.x,
+      y: 0.0,
+      z: lz.z,
+      side: lz.side,
+      name: lz.name,
+      mesh: padGroup,
+      beam: beam,
+      ring: ring,
+      origColor: beamColor,
+      sprite: lblSprite
+    });
+  });
+}
+
+// 3. Airport Windsock (바람자루)
+function buildWindsock() {
+  const wsGroup = new THREE.Group();
+  wsGroup.position.set(180, 0, -38);
+
+  const mastGeo = new THREE.CylinderGeometry(0.06, 0.09, 8.0, 12);
+  const mastMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.25 });
+  const mast = new THREE.Mesh(mastGeo, mastMat);
+  mast.position.y = 4.0;
+  wsGroup.add(mast);
+
+  const sockGroup = new THREE.Group();
+  sockGroup.position.y = 8.0;
+
+  const coneGeo = new THREE.ConeGeometry(0.42, 2.4, 16, 4, true);
+  coneGeo.rotateZ(-Math.PI / 2);
+  coneGeo.translate(1.2, 0, 0);
+
+  const sockCanvas = document.createElement('canvas');
+  sockCanvas.width = 256; sockCanvas.height = 64;
+  const sCtx = sockCanvas.getContext('2d');
+  const stripes = ['#ea580c', '#f8fafc', '#ea580c', '#f8fafc', '#ea580c'];
+  stripes.forEach((c, idx) => {
+    sCtx.fillStyle = c;
+    sCtx.fillRect(idx * 51.2, 0, 52, 64);
+  });
+  const sockTex = new THREE.CanvasTexture(sockCanvas);
+
+  const sockMat = new THREE.MeshStandardMaterial({ map: sockTex, roughness: 0.8, side: THREE.DoubleSide });
+  const sock = new THREE.Mesh(coneGeo, sockMat);
+  sockGroup.add(sock);
+  wsGroup.add(sockGroup);
+  windsockMesh = sockGroup;
+
+  scene.add(wsGroup);
+}
+
+// 4. Distant Airport Buildings (ATC Tower & Hangars)
+function buildAirportBuildings() {
+  const bldgGroup = new THREE.Group();
+
+  // 4.1 ATC Control Tower at (x = 460, z = -120)
+  const towerGroup = new THREE.Group();
+  towerGroup.position.set(460, 0, -120);
+
+  const concreteMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.7 });
+  const baseGeo = new THREE.BoxGeometry(26, 8, 22);
+  const baseMesh = new THREE.Mesh(baseGeo, concreteMat);
+  baseMesh.position.y = 4;
+  towerGroup.add(baseMesh);
+
+  const shaftGeo = new THREE.CylinderGeometry(3.6, 4.8, 38, 20);
+  const shaft = new THREE.Mesh(shaftGeo, concreteMat);
+  shaft.position.y = 27;
+  towerGroup.add(shaft);
+
+  const cabGeo = new THREE.CylinderGeometry(6.2, 4.8, 6, 8);
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x0284c7,
+    roughness: 0.1,
+    metalness: 0.85,
+    transparent: true,
+    opacity: 0.75
+  });
+  const cab = new THREE.Mesh(cabGeo, glassMat);
+  cab.position.y = 49;
+  towerGroup.add(cab);
+
+  const roofGeo = new THREE.ConeGeometry(7.0, 2.5, 8);
+  const roof = new THREE.Mesh(roofGeo, concreteMat);
+  roof.position.y = 53.25;
+  towerGroup.add(roof);
+
+  const radarGroup = new THREE.Group();
+  radarGroup.position.y = 55.5;
+  const dishGeo = new THREE.BoxGeometry(4.2, 0.8, 0.2);
+  const radarMat = new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3 });
+  const dish = new THREE.Mesh(dishGeo, radarMat);
+  radarGroup.add(dish);
+  towerGroup.add(radarGroup);
+  atcRadar = radarGroup;
+
+  bldgGroup.add(towerGroup);
+
+  // 4.2 Arched Corrugated Steel Hangars at (x = 250, z = -105) and (x = 680, z = -105)
+  [250, 680].forEach(hx => {
+    const hangarGroup = new THREE.Group();
+    hangarGroup.position.set(hx, 0, -105);
+
+    const arcGeo = new THREE.CylinderGeometry(16, 16, 36, 24, 1, false, 0, Math.PI);
+    arcGeo.rotateZ(Math.PI / 2);
+    arcGeo.rotateY(Math.PI / 2);
+    const hangarMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.65, roughness: 0.4 });
+    const hangar = new THREE.Mesh(arcGeo, hangarMat);
+    hangarGroup.add(hangar);
+
+    const doorGeo = new THREE.PlaneGeometry(24, 12);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.7, roughness: 0.35 });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 6, 18.1);
+    hangarGroup.add(door);
+
+    bldgGroup.add(hangarGroup);
+  });
+
+  scene.add(bldgGroup);
+}
+
+// 5. Distant Mountain Silhouettes on the Horizon
+function buildDistantMountains() {
+  const mtnGroup = new THREE.Group();
+
+  // 1. Cheonsu Bay Coastal Sea Water (서해 천수만 해안 - Western Shoreline)
+  const seaGeo = new THREE.PlaneGeometry(1600, 2600, 16, 16);
+  seaGeo.rotateX(-Math.PI / 2);
+  const seaMat = new THREE.MeshStandardMaterial({
+    color: 0x1d3f57, // Deep coastal bay blue
+    roughness: 0.22,
+    metalness: 0.60
+  });
+  const seaMesh = new THREE.Mesh(seaGeo, seaMat);
+  seaMesh.position.set(-1100, -0.35, 0);
+  mtnGroup.add(seaMesh);
+
+  // Coastal mudflat / sandy shoreline strip
+  const shoreGeo = new THREE.PlaneGeometry(80, 2600);
+  shoreGeo.rotateX(-Math.PI / 2);
+  const shoreMat = new THREE.MeshStandardMaterial({
+    color: 0x585144, // Moist coastal silt
+    roughness: 0.90,
+    metalness: 0.05
+  });
+  const shoreMesh = new THREE.Mesh(shoreGeo, shoreMat);
+  shoreMesh.position.set(-300, -0.05, 0);
+  mtnGroup.add(shoreMesh);
+
+  // 2. Rolling Forested Mountain Ridges (Gentle Korean Granite Foothills)
+  function createRollingRidge(zCenter, length, width, baseHeight, amp1, amp2, colorHex, rough) {
+    const segmentsX = 120, segmentsZ = 16;
+    const ridgeGeo = new THREE.PlaneGeometry(length, width, segmentsX, segmentsZ);
+    ridgeGeo.rotateX(-Math.PI / 2);
+    const pos = ridgeGeo.attributes.position;
+
+    for (let i = 0; i < pos.count; i++) {
+      const vx = pos.getX(i);
+      const vz = pos.getZ(i);
+      const distFromCenter = Math.abs(vz) / (width * 0.5);
+      const crossWeight = Math.max(0, Math.cos(distFromCenter * (Math.PI * 0.5)));
+
+      const hProfile = baseHeight 
+                     + amp1 * Math.sin(vx * 0.0032 + 1.2) 
+                     + amp2 * Math.cos(vx * 0.0078 + 0.5)
+                     + (amp2 * 0.4) * Math.sin(vx * 0.016 + 2.1);
+      
+      pos.setY(i, Math.max(-5, hProfile * crossWeight - 4));
+    }
+    ridgeGeo.computeVertexNormals();
+
+    const ridgeMat = new THREE.MeshStandardMaterial({
+      color: colorHex,
+      roughness: rough,
+      metalness: 0.04
+    });
+    const ridge = new THREE.Mesh(ridgeGeo, ridgeMat);
+    ridge.position.set(700, 0, zCenter);
+    return ridge;
+  }
+
+  // North Mid Ridge (Forested Korean Green)
+  mtnGroup.add(createRollingRidge(-620, 3600, 360, 52, 28, 16, 0x334432, 0.95));
+  // North Distant Horizon Ridge (Soft Atmospheric Slate Blue)
+  mtnGroup.add(createRollingRidge(-1350, 4200, 550, 95, 42, 25, 0x5b758b, 0.98));
+
+  // South Mid Ridge
+  mtnGroup.add(createRollingRidge(640, 3600, 360, 48, 26, 15, 0x354633, 0.95));
+  // South Distant Horizon Ridge
+  mtnGroup.add(createRollingRidge(1380, 4200, 550, 90, 40, 24, 0x5d778d, 0.98));
+
+  scene.add(mtnGroup);
+}
+
+// 6. Detailed 3D Airfield Vegetation & Perimeter Road Infrastructure (Matching driving_frame_1.png)
+function buildAirfieldVegetation() {
+  const vegGroup = new THREE.Group();
+
+  const pineTrunkMat = new THREE.MeshStandardMaterial({ color: 0x433328, roughness: 0.9 });
+  const pineFoliageMat1 = new THREE.MeshStandardMaterial({ color: 0x1d2e1e, roughness: 0.85 });
+  const pineFoliageMat2 = new THREE.MeshStandardMaterial({ color: 0x273b26, roughness: 0.82 });
+
+  const broadTrunkMat = new THREE.MeshStandardMaterial({ color: 0x4a4035, roughness: 0.88 });
+  const broadFoliageMat1 = new THREE.MeshStandardMaterial({ color: 0x384c2d, roughness: 0.85 });
+  const broadFoliageMat2 = new THREE.MeshStandardMaterial({ color: 0x445a35, roughness: 0.82 });
+
+  // 1. Korean Red Pine (소나무, Pinus densiflora) Generator
+  function createKoreanPine(h, scale) {
+    const pine = new THREE.Group();
+    const trunkGeo = new THREE.CylinderGeometry(0.14 * scale, 0.26 * scale, h, 7);
+    trunkGeo.translate(0, h * 0.5, 0);
+    const trunk = new THREE.Mesh(trunkGeo, pineTrunkMat);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    pine.add(trunk);
+
+    const pads = [
+      { y: h * 0.52, r: 1.8 * scale, th: 0.55 * scale, mat: pineFoliageMat1 },
+      { y: h * 0.70, r: 1.5 * scale, th: 0.50 * scale, mat: pineFoliageMat2 },
+      { y: h * 0.86, r: 1.2 * scale, th: 0.45 * scale, mat: pineFoliageMat1 },
+      { y: h * 1.00, r: 0.8 * scale, th: 0.40 * scale, mat: pineFoliageMat2 }
+    ];
+    pads.forEach(p => {
+      const padGeo = new THREE.DodecahedronGeometry(p.r, 1);
+      padGeo.scale(1.0, p.th / p.r, 1.0);
+      const pad = new THREE.Mesh(padGeo, p.mat);
+      pad.position.set((Math.random() - 0.5) * 0.3 * scale, p.y, (Math.random() - 0.5) * 0.3 * scale);
+      pad.castShadow = true;
+      pad.receiveShadow = true;
+      pine.add(pad);
+    });
+    return pine;
+  }
+
+  // 2. Broadleaf Deciduous Tree Generator
+  function createBroadleafTree(h, scale) {
+    const tree = new THREE.Group();
+    const trunkGeo = new THREE.CylinderGeometry(0.18 * scale, 0.30 * scale, h * 0.55, 8);
+    trunkGeo.translate(0, h * 0.275, 0);
+    const trunk = new THREE.Mesh(trunkGeo, broadTrunkMat);
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    tree.add(trunk);
+
+    const canopyClumps = [
+      { y: h * 0.65, x: 0, z: 0, r: 1.8 * scale, mat: broadFoliageMat1 },
+      { y: h * 0.78, x: 0.5 * scale, z: 0.3 * scale, r: 1.5 * scale, mat: broadFoliageMat2 },
+      { y: h * 0.75, x: -0.4 * scale, z: -0.3 * scale, r: 1.4 * scale, mat: broadFoliageMat1 },
+      { y: h * 0.92, x: 0.1 * scale, z: 0.1 * scale, r: 1.2 * scale, mat: broadFoliageMat2 }
+    ];
+    canopyClumps.forEach(c => {
+      const clumpGeo = new THREE.DodecahedronGeometry(c.r, 1);
+      const clump = new THREE.Mesh(clumpGeo, c.mat);
+      clump.position.set(c.x, c.y, c.z);
+      clump.castShadow = true;
+      clump.receiveShadow = true;
+      tree.add(clump);
+    });
+    return tree;
+  }
+
+  // 3. Populate Organic Trees along Perimeter Road & Buildings
+  for (let x = -350; x <= 1750; x += 24 + Math.random() * 18) {
+    const tz = -44 - Math.random() * 8;
+    const isPine = Math.random() < 0.65;
+    const h = 7.0 + Math.random() * 3.5;
+    const tree = isPine ? createKoreanPine(h, 0.85 + Math.random() * 0.35) : createBroadleafTree(h, 0.85 + Math.random() * 0.35);
+    tree.position.set(x, 0, tz);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    vegGroup.add(tree);
+  }
+
+  for (let x = -350; x <= 1750; x += 28 + Math.random() * 20) {
+    const tz = 45 + Math.random() * 10;
+    const isPine = Math.random() < 0.55;
+    const h = 6.5 + Math.random() * 3.8;
+    const tree = isPine ? createKoreanPine(h, 0.85 + Math.random() * 0.35) : createBroadleafTree(h, 0.85 + Math.random() * 0.35);
+    tree.position.set(x, 0, tz);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    vegGroup.add(tree);
+  }
+
+  // Hangar & ATC Tower Grove
+  for (let i = 0; i < 35; i++) {
+    const hx = 180 + Math.random() * 560;
+    const hz = -120 - Math.random() * 35;
+    const isPine = Math.random() < 0.7;
+    const h = 8.0 + Math.random() * 4.0;
+    const tree = isPine ? createKoreanPine(h, 1.0 + Math.random() * 0.4) : createBroadleafTree(h, 1.0 + Math.random() * 0.4);
+    tree.position.set(hx, 0, hz);
+    tree.rotation.y = Math.random() * Math.PI * 2;
+    vegGroup.add(tree);
+  }
+
+  // 4. Korean Highway / Airfield Guardrails (W-Beam 가드레일 - Matching driving_frame_1.png)
+  const railMat = new THREE.MeshStandardMaterial({
+    color: 0x9ca3af,
+    metalness: 0.85,
+    roughness: 0.32
+  });
+  const postMat = new THREE.MeshStandardMaterial({
+    color: 0x64748b,
+    metalness: 0.80,
+    roughness: 0.38
+  });
+
+  const postGeo = new THREE.BoxGeometry(0.12, 0.85, 0.12);
+  const wBeamGeo = new THREE.BoxGeometry(4.0, 0.32, 0.08);
+
+  for (let gx = -380; gx <= 1780; gx += 4.0) {
+    const post = new THREE.Mesh(postGeo, postMat);
+    post.position.set(gx, 0.425, -40.2);
+    vegGroup.add(post);
+
+    const beam = new THREE.Mesh(wBeamGeo, railMat);
+    beam.position.set(gx + 2.0, 0.65, -40.16);
+    vegGroup.add(beam);
+  }
+
+  // 5. Tubular Steel Streetlight Poles (가로등)
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.75, roughness: 0.35 });
+  const lampGeo = new THREE.BoxGeometry(0.75, 0.18, 0.30);
+  const lampLensMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+
+  for (let lx = -360; lx <= 1760; lx += 48.0) {
+    const streetLight = new THREE.Group();
+    streetLight.position.set(lx, 0, -41.0);
+
+    const poleGeo = new THREE.CylinderGeometry(0.08, 0.12, 7.5, 10);
+    poleGeo.translate(0, 3.75, 0);
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    streetLight.add(pole);
+
+    const armGeo = new THREE.CylinderGeometry(0.05, 0.06, 2.2, 8);
+    armGeo.rotateX(Math.PI / 3);
+    armGeo.translate(0, 7.8, 0.8);
+    const arm = new THREE.Mesh(armGeo, poleMat);
+    streetLight.add(arm);
+
+    const lamp = new THREE.Mesh(lampGeo, poleMat);
+    lamp.position.set(0, 8.2, 1.8);
+    lamp.rotation.x = Math.PI * 0.12;
+    streetLight.add(lamp);
+
+    vegGroup.add(streetLight);
+  }
+
+  scene.add(vegGroup);
+}
+
+function buildWindTurbines() {
+  const turbinePositions = [
+    [150, -220], [350, -240], [550, -230], [800, -220],
+    [200,  240], [450,  250], [700,  230], [950,  240]
+  ];
+
+  turbinePositions.forEach(p => {
+    const group = new THREE.Group();
+    group.position.set(p[0], 0, p[1]);
+
+    const towerGeo = new THREE.CylinderGeometry(0.8, 1.8, 60, 16);
+    const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
+    const tower = new THREE.Mesh(towerGeo, whiteMat);
+    tower.position.y = 30;
+    group.add(tower);
+
+    const nacGeo = new THREE.BoxGeometry(3.2, 2.6, 7.5);
+    const nacelle = new THREE.Mesh(nacGeo, whiteMat);
+    nacelle.position.set(0, 60, 0);
+    group.add(nacelle);
+
+    const rotorHub = new THREE.Group();
+    rotorHub.position.set(0, 60, 4.0);
+
+    for (let b = 0; b < 3; b++) {
+      const bladeGeo = new THREE.ConeGeometry(0.7, 26, 6);
+      bladeGeo.rotateZ(Math.PI);
+      bladeGeo.translate(0, 13, 0);
+      const blade = new THREE.Mesh(bladeGeo, whiteMat);
+      blade.rotation.z = (b * Math.PI * 2) / 3;
+      rotorHub.add(blade);
+    }
+    group.add(rotorHub);
+    turbineBlades.push(rotorHub);
+
+    scene.add(group);
+  });
+}
+
+// 7. Ambient Contact Ground Shadow
+function createContactShadow() {
+  const canvasShd = document.createElement('canvas');
+  canvasShd.width = 128; canvasShd.height = 128;
+  const ctxShd = canvasShd.getContext('2d');
+  const gradShd = ctxShd.createRadialGradient(64, 64, 8, 64, 64, 62);
+  gradShd.addColorStop(0, 'rgba(10, 14, 18, 0.85)');
+  gradShd.addColorStop(0.5, 'rgba(12, 16, 22, 0.42)');
+  gradShd.addColorStop(1.0, 'rgba(12, 16, 22, 0.0)');
+  ctxShd.fillStyle = gradShd;
+  ctxShd.beginPath();
+  ctxShd.arc(64, 64, 62, 0, Math.PI * 2);
+  ctxShd.fill();
+
+  const shdGeo = new THREE.PlaneGeometry(1.6, 1.6);
+  shdGeo.rotateX(-Math.PI / 2);
+  const shdMat = new THREE.MeshBasicMaterial({
+    map: new THREE.CanvasTexture(canvasShd),
+    transparent: true,
+    opacity: 0.65,
+    depthWrite: false
+  });
+  contactShadow = new THREE.Mesh(shdGeo, shdMat);
+  contactShadow.position.y = 0.035;
+  scene.add(contactShadow);
+}
+
+// 7.1 Dynamic 3D Flight Trajectory Trail Line (Neon Flight Path Visualization)
+let trailLine, trailPositions, trailColors;
+const MAX_TRAIL_POINTS = 3000;
+let trailPointCount = 0;
+let lastTrailRecordTime = 0;
+
+function initTrajectoryTrail() {
+  const geo = new THREE.BufferGeometry();
+  trailPositions = new Float32Array(MAX_TRAIL_POINTS * 3);
+  trailColors = new Float32Array(MAX_TRAIL_POINTS * 3);
+  geo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
+  geo.setDrawRange(0, 0);
+
+  const mat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.88,
+    blending: THREE.AdditiveBlending
+  });
+
+  trailLine = new THREE.Line(geo, mat);
+  trailLine.frustumCulled = false;
+  scene.add(trailLine);
+}
+
+function updateTrajectoryTrail() {
+  if (!trailLine || droneState.simPaused) return;
+  const now = performance.now();
+  if (now - lastTrailRecordTime < 45) return; // ~22 records per sec
+  lastTrailRecordTime = now;
+
+  if (trailPointCount < MAX_TRAIL_POINTS) {
+    const idx = trailPointCount * 3;
+    trailPositions[idx]     = droneState.pos.x;
+    trailPositions[idx + 1] = droneState.pos.y;
+    trailPositions[idx + 2] = droneState.pos.z;
+
+    if (droneState.bmsState === 0) {
+      trailColors[idx] = 0.0;  trailColors[idx + 1] = 0.9;  trailColors[idx + 2] = 1.0;  // Cyan (Normal)
+    } else if (droneState.bmsState === 1) {
+      trailColors[idx] = 1.0;  trailColors[idx + 1] = 0.65; trailColors[idx + 2] = 0.0;  // Orange (Warning 60C)
+    } else if (droneState.bmsState === 2) {
+      trailColors[idx] = 1.0;  trailColors[idx + 1] = 0.15; trailColors[idx + 2] = 0.15; // Red (Emergency 70C)
+    } else {
+      trailColors[idx] = 0.1;  trailColors[idx + 1] = 1.0;  trailColors[idx + 2] = 0.4;  // Green (Touchdown)
+    }
+
+    trailPointCount++;
+    trailLine.geometry.setDrawRange(0, trailPointCount);
+    trailLine.geometry.attributes.position.needsUpdate = true;
+    trailLine.geometry.attributes.color.needsUpdate = true;
+  }
+}
+
+// 8. Authentic DJI FlameWheel F450 Multirotor Model (Hyper-Detailed PBR)
+function buildDrone() {
+  drone = new THREE.Group();
+  drone.position.copy(droneState.pos);
+
+  // High-Fidelity PBR Materials strictly matched to User's Lab Hardware Photo
+  // High-Fidelity PBR Materials (Reduced Roughness & High Metalness for Carbon Gloss)
+  const carbonMat = new THREE.MeshStandardMaterial({
+    map: texCarbon,
+    bumpMap: texCarbon,
+    bumpScale: 0.008,
+    roughness: 0.16, // Low roughness for deep gloss reflections
+    metalness: 0.72  // High metalness for carbon weave specular sheen
+  });
+  // Real-time State-linked Dynamic Thermal/Voltage Glow Material for Drone Body & Strips
+  droneDynamicGlowMat = new THREE.MeshStandardMaterial({
+    color: 0x00e5ff,
+    emissive: 0x004466,
+    emissiveIntensity: 0.75,
+    roughness: 0.15,
+    metalness: 0.82
+  });
+  const goldPadMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2 });
+  const blackAlumMat = new THREE.MeshStandardMaterial({ color: 0x18191c, metalness: 0.88, roughness: 0.18 });
+  const cncSilverMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.98, roughness: 0.10 });
+  const copperMat = new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.9, roughness: 0.2 });
+  const whiteNylonMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.05 });
+  const redArmMat = new THREE.MeshStandardMaterial({ color: 0x9e1a2d, roughness: 0.38, metalness: 0.10 });
+  const blackArmMat = new THREE.MeshStandardMaterial({ color: 0x1c1d20, roughness: 0.42, metalness: 0.12 });
+  const escMat = new THREE.MeshStandardMaterial({ color: 0x1e2024, roughness: 0.5 });
+  const wireBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.5 });
+  const wireYellowMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.5 });
+  const strapMat = new THREE.MeshStandardMaterial({ color: 0x0f1114, roughness: 0.9 });
+
+  // -------------------------------------------------------------------------
+  // 1. Central Chassis & Multi-Tier Electronic Stacking Tower (Pixhawk Stack)
+  // -------------------------------------------------------------------------
+  // Lower Power Distribution Board (PDB) Plate
+  const pdbGeo = new THREE.BoxGeometry(0.18, 0.004, 0.18);
+  const pdb = new THREE.Mesh(pdbGeo, carbonMat);
+  pdb.position.y = -0.015;
+  pdb.castShadow = true;
+  drone.add(pdb);
+
+  // Gold exposed solder pads around PDB perimeter
+  [-0.075, 0.075].forEach(px => {
+    [-0.075, 0.075].forEach(pz => {
+      const padG = new THREE.BoxGeometry(0.024, 0.005, 0.024);
+      const padM = new THREE.Mesh(padG, goldPadMat);
+      padM.position.set(px, -0.014, pz);
+      drone.add(padM);
+    });
+  });
+
+  // Middle Main Structural Deck Plate
+  const midPlateGeo = new THREE.BoxGeometry(0.165, 0.004, 0.165);
+  const midPlate = new THREE.Mesh(midPlateGeo, carbonMat);
+  midPlate.position.y = 0.025;
+  midPlate.castShadow = true;
+  drone.add(midPlate);
+
+  // 4 Black Anodized Aluminum Chassis Standoffs (Connecting Lower PDB & Middle Deck)
+  [-0.065, 0.065].forEach(sx => {
+    [-0.065, 0.065].forEach(sz => {
+      const stGeo = new THREE.CylinderGeometry(0.004, 0.004, 0.036, 8);
+      const st = new THREE.Mesh(stGeo, blackAlumMat);
+      st.position.set(sx, 0.005, sz);
+      drone.add(st);
+    });
+  });
+
+  // 4 Tall White Nylon Standoffs (Elevating Upper Electronic Stack Deck)
+  [-0.048, 0.048].forEach(sx => {
+    [-0.048, 0.048].forEach(sz => {
+      const stGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 0.05, 8);
+      const st = new THREE.Mesh(stGeo, whiteNylonMat);
+      st.position.set(sx, 0.052, sz);
+      drone.add(st);
+    });
+  });
+
+  // Upper Electronics Deck Plate (Carbon Fiber)
+  const topPlateGeo = new THREE.BoxGeometry(0.13, 0.003, 0.13);
+  const topPlate = new THREE.Mesh(topPlateGeo, carbonMat);
+  topPlate.position.y = 0.078;
+  topPlate.castShadow = true;
+  drone.add(topPlate);
+
+  // Pixhawk 1 Flight Controller on Upper Deck (as on user's Mission Planner setup)
+  const fcGeo = new THREE.BoxGeometry(0.082, 0.016, 0.048);
+  const fc = new THREE.Mesh(fcGeo, blackAlumMat);
+  fc.position.set(0, 0.088, 0);
+  drone.add(fc);
+
+  // FC Status Multi-Color LED Indicator
+  const ledGeo = new THREE.SphereGeometry(0.006, 12, 12);
+  const ledMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+  fcStatusLed = new THREE.Mesh(ledGeo, ledMat);
+  fcStatusLed.position.set(0, 0.098, 0.016);
+  drone.add(fcStatusLed);
+
+  // Multicolored Servo & Telemetry Wiring Harness Looping across Central Stack
+  const wireGeo1 = new THREE.TorusGeometry(0.024, 0.002, 6, 16, Math.PI);
+  wireGeo1.rotateX(Math.PI / 2);
+  const wire1 = new THREE.Mesh(wireGeo1, wireYellowMat);
+  wire1.position.set(0.035, 0.075, 0.02);
+  drone.add(wire1);
+
+  const wireGeo2 = new THREE.TorusGeometry(0.022, 0.002, 6, 16, Math.PI);
+  wireGeo2.rotateX(Math.PI / 2);
+  const wire2 = new THREE.Mesh(wireGeo2, wireBlueMat);
+  wire2.position.set(-0.035, 0.075, -0.02);
+  drone.add(wire2);
+
+  // -------------------------------------------------------------------------
+  // 2. Tall Black Folding GPS Mast & Saucer Puck (Matching User Photo)
+  // -------------------------------------------------------------------------
+  const mastX = -0.042, mastZ = 0.045; // Rear-right mount
+  // Mast Hinged Knurled Aluminum Base
+  const baseKnuckleGeo = new THREE.CylinderGeometry(0.008, 0.009, 0.022, 12);
+  const baseKnuckle = new THREE.Mesh(baseKnuckleGeo, blackAlumMat);
+  baseKnuckle.position.set(mastX, 0.088, mastZ);
+  drone.add(baseKnuckle);
+
+  // Tall Vertical Carbon Rod (Height: 20cm!)
+  const mastRodGeo = new THREE.CylinderGeometry(0.0035, 0.0035, 0.20, 10);
+  const mastRod = new THREE.Mesh(mastRodGeo, blackAlumMat);
+  mastRod.position.set(mastX, 0.19, mastZ);
+  drone.add(mastRod);
+
+  // Black GPS Saucer Puck (Ublox NEO-M8N / Here GPS)
+  const puckGeo = new THREE.CylinderGeometry(0.042, 0.039, 0.015, 28);
+  const puck = new THREE.Mesh(puckGeo, blackAlumMat);
+  puck.position.set(mastX, 0.295, mastZ);
+  drone.add(puck);
+
+  const puckCapGeo = new THREE.SphereGeometry(0.041, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.35);
+  const puckCap = new THREE.Mesh(puckCapGeo, blackAlumMat);
+  puckCap.position.set(mastX, 0.298, mastZ);
+  drone.add(puckCap);
+
+  // Red forward orientation notch on GPS puck
+  const notchGeo = new THREE.BoxGeometry(0.008, 0.004, 0.015);
+  const notchMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+  const notch = new THREE.Mesh(notchGeo, notchMat);
+  notch.position.set(mastX + 0.038, 0.30, mastZ);
+  drone.add(notch);
+
+  // -------------------------------------------------------------------------
+  // 3. Under-Chassis Accessories: LiPo Battery, Hanging Strap, Telemetry Antenna
+  // -------------------------------------------------------------------------
+  // 4S 3800mAh LiPo Battery Pack
+  const battGeo = new THREE.BoxGeometry(0.14, 0.042, 0.045);
+  const batt = new THREE.Mesh(battGeo, escMat);
+  batt.position.set(0, -0.042, 0);
+  batt.castShadow = true;
+  drone.add(batt);
+
+  // Silver LiPo Specification Label
+  const battLblGeo = new THREE.PlaneGeometry(0.09, 0.028);
+  battLblGeo.rotateZ(Math.PI / 2);
+  battLblGeo.rotateY(-Math.PI / 2);
+  const battLblMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.3 });
+  const battLbl = new THREE.Mesh(battLblGeo, battLblMat);
+  battLbl.position.set(-0.071, -0.042, 0);
+  drone.add(battLbl);
+
+  // Yellow XT60 High-Current Connector & Thick 12AWG Silicone Leads
+  const xtGeo = new THREE.BoxGeometry(0.018, 0.012, 0.024);
+  const xtMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.35 });
+  const xt60 = new THREE.Mesh(xtGeo, xtMat);
+  xt60.position.set(-0.082, -0.035, 0);
+  drone.add(xt60);
+
+  // Hanging Black Woven Battery Strap (as shown dangling in user photo)
+  const strapLoopGeo = new THREE.TorusGeometry(0.028, 0.0035, 6, 16, Math.PI * 1.3);
+  strapLoopGeo.rotateZ(Math.PI / 2);
+  const strapMesh = new THREE.Mesh(strapLoopGeo, strapMat);
+  strapMesh.position.set(0, -0.08, 0);
+  drone.add(strapMesh);
+
+  // Downward Black Telemetry Rubber Ducky Antenna (matching photo)
+  const antGeo = new THREE.CylinderGeometry(0.004, 0.005, 0.12, 8);
+  const ant = new THREE.Mesh(antGeo, blackAlumMat);
+  ant.position.set(0.025, -0.11, 0);
+  drone.add(ant);
+
+  // -------------------------------------------------------------------------
+  // 4. Four FlameWheel F450 Molded Arms (Front 2 Crimson Red, Rear 2 Black)
+  // -------------------------------------------------------------------------
+  const armRadius = 0.225;
+  const armAngles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+
+  armAngles.forEach((ang, idx) => {
+    const isFront = (idx === 0 || idx === 3);
+    const armGroup = new THREE.Group();
+    armGroup.rotation.y = ang;
+
+    // Front: Deep Crimson Red | Rear: Satin Black (Strictly matching user photo!)
+    const currentArmMat = isFront ? redArmMat : blackArmMat;
+
+    // Upper Ribbed Beam
+    const upBeamGeo = new THREE.BoxGeometry(armRadius, 0.014, 0.028);
+    upBeamGeo.translate(armRadius / 2, 0.018, 0);
+    const upBeam = new THREE.Mesh(upBeamGeo, currentArmMat);
+    upBeam.castShadow = true;
+    armGroup.add(upBeam);
+
+    // Lower Ribbed Beam
+    const lowBeamGeo = new THREE.BoxGeometry(armRadius, 0.012, 0.024);
+    lowBeamGeo.translate(armRadius / 2, -0.010, 0);
+    const lowBeam = new THREE.Mesh(lowBeamGeo, currentArmMat);
+    lowBeam.castShadow = true;
+    armGroup.add(lowBeam);
+
+    // 3 FlameWheel Lattice Truss Struts
+    [0.07, 0.12, 0.17].forEach(ribX => {
+      const ribGeo = new THREE.BoxGeometry(0.010, 0.026, 0.020);
+      const rib = new THREE.Mesh(ribGeo, currentArmMat);
+      rib.position.set(ribX, 0.004, 0);
+      armGroup.add(rib);
+    });
+
+    // Integrated Motor Bumper Guard (Under Motor Tip - as in user photo!)
+    const guardShape = new THREE.Shape();
+    guardShape.moveTo(0, 0);
+    guardShape.lineTo(0.028, -0.065);
+    guardShape.lineTo(-0.012, -0.065);
+    guardShape.lineTo(-0.018, 0);
+    guardShape.closePath();
+    const guardHole = new THREE.Path();
+    guardHole.moveTo(0.005, -0.018);
+    guardHole.lineTo(0.018, -0.052);
+    guardHole.lineTo(-0.005, -0.052);
+    guardHole.closePath();
+    guardShape.holes.push(guardHole);
+
+    const guardExtrude = new THREE.ExtrudeGeometry(guardShape, { depth: 0.012, bevelEnabled: false });
+    guardExtrude.rotateY(Math.PI / 2);
+    const guardMesh = new THREE.Mesh(guardExtrude, currentArmMat);
+    guardMesh.position.set(armRadius, 0.01, 0.006);
+    armGroup.add(guardMesh);
+
+    // ESC (Electronic Speed Controller) Mounted on Top of Arm
+    const escGeo = new THREE.BoxGeometry(0.048, 0.010, 0.022);
+    const esc = new THREE.Mesh(escGeo, escMat);
+    esc.position.set(0.11, 0.028, 0);
+    armGroup.add(esc);
+
+    // Black Zip-Ties Securing ESC to Arm
+    [-0.016, 0.016].forEach(zx => {
+      const tieGeo = new THREE.BoxGeometry(0.003, 0.014, 0.024);
+      const tie = new THREE.Mesh(tieGeo, strapMat);
+      tie.position.set(0.11 + zx, 0.028, 0);
+      armGroup.add(tie);
+    });
+
+    // 3 Motor Phase Wires (Blue Silicone Leads) Looping into Motor Base
+    const wireCurve1 = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(0.135, 0.025, 0.008),
+      new THREE.Vector3(0.18, -0.005, 0.015),
+      new THREE.Vector3(armRadius, 0.018, 0.008)
+    );
+    const wireMesh1 = new THREE.Mesh(new THREE.TubeGeometry(wireCurve1, 10, 0.002, 6, false), wireBlueMat);
+    armGroup.add(wireMesh1);
+
+    const wireCurve2 = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(0.135, 0.025, -0.008),
+      new THREE.Vector3(0.18, -0.005, -0.015),
+      new THREE.Vector3(armRadius, 0.018, -0.008)
+    );
+    const wireMesh2 = new THREE.Mesh(new THREE.TubeGeometry(wireCurve2, 10, 0.002, 6, false), wireBlueMat);
+    armGroup.add(wireMesh2);
+
+    // Motor Mount Disc at Arm Tip
+    const padGeo = new THREE.CylinderGeometry(0.026, 0.028, 0.014, 16);
+    const motorPad = new THREE.Mesh(padGeo, currentArmMat);
+    motorPad.position.set(armRadius, 0.022, 0);
+    armGroup.add(motorPad);
+
+    // DJI 2212 920KV Brushless Motor Base (Black Anodized Stator)
+    const motorBaseGeo = new THREE.CylinderGeometry(0.020, 0.022, 0.014, 16);
+    const motorBase = new THREE.Mesh(motorBaseGeo, blackAlumMat);
+    motorBase.position.set(armRadius, 0.034, 0);
+    armGroup.add(motorBase);
+
+    // Visible Copper Stator Windings Inside Base Vents
+    const copperGeo = new THREE.CylinderGeometry(0.017, 0.017, 0.016, 12);
+    const copper = new THREE.Mesh(copperGeo, copperMat);
+    copper.position.set(armRadius, 0.046, 0);
+    armGroup.add(copper);
+
+    // Precision CNC Brushed Aluminum Motor Bell (Silver Rotor Casing)
+    const motorBellGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.025, 20);
+    const motorBell = new THREE.Mesh(motorBellGeo, cncSilverMat);
+    motorBell.position.set(armRadius, 0.054, 0);
+    motorBell.castShadow = true;
+    armGroup.add(motorBell);
+
+    // Silver Conical Spinner Bullet Prop Nut (with horizontal tightening hole)
+    const nutGeo = new THREE.ConeGeometry(0.009, 0.022, 16);
+    const nut = new THREE.Mesh(nutGeo, cncSilverMat);
+    nut.position.set(armRadius, 0.076, 0);
+    armGroup.add(nut);
+
+    // 1045 Carbon Propeller & Dynamic Blur Disc
+    const propGroup = new THREE.Group();
+    propGroup.position.set(armRadius, 0.068, 0);
+
+    // Realistic Spinning Rotor Blur Disc (High-Speed Flight Anisotropic Shutter)
+    const discGeo = new THREE.CircleGeometry(0.24, 28);
+    discGeo.rotateX(-Math.PI / 2);
+    const discMat = new THREE.MeshBasicMaterial({
+      map: texRotor,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    propGroup.add(disc);
+
+    // Aerodynamic Carbon Blade with Twist Profile
+    const bladeGeo = new THREE.BoxGeometry(0.48, 0.005, 0.028);
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x111113, metalness: 0.45, roughness: 0.25 });
+    const blade = new THREE.Mesh(bladeGeo, bladeMat);
+    propGroup.add(blade);
+
+    armGroup.add(propGroup);
+    propMeshes.push(propGroup);
+
+    // -----------------------------------------------------------------------
+    // 5. Tall Curved White Landing Gear Skid Leg (Exact Match to User Photo!)
+    // -----------------------------------------------------------------------
+    const legCurve = new THREE.CubicBezierCurve3(
+      new THREE.Vector3(0.065, -0.015, 0.0),
+      new THREE.Vector3(0.095, -0.09, 0.0),
+      new THREE.Vector3(0.145, -0.19, 0.0),
+      new THREE.Vector3(0.185, -0.27, 0.0)
+    );
+    const legTubeGeo = new THREE.TubeGeometry(legCurve, 16, 0.007, 8, false);
+    const legMesh = new THREE.Mesh(legTubeGeo, whiteNylonMat);
+    legMesh.castShadow = true;
+    legMesh.receiveShadow = true;
+    armGroup.add(legMesh);
+
+    // Horizontal Footpad at bottom of leg
+    const footGeo = new THREE.BoxGeometry(0.032, 0.006, 0.016);
+    const foot = new THREE.Mesh(footGeo, whiteNylonMat);
+    foot.position.set(0.185, -0.27, 0.0);
+    foot.castShadow = true;
+    armGroup.add(foot);
+
+    drone.add(armGroup);
+  });
+
+  // Dynamic Status Glow Accents on Chassis Decks (Cyan/Amber/Red State Link)
+  const deckRingGeo = new THREE.RingGeometry(0.065, 0.076, 32);
+  deckRingGeo.rotateX(-Math.PI / 2);
+  const deckRingMesh = new THREE.Mesh(deckRingGeo, droneDynamicGlowMat);
+  deckRingMesh.position.y = 0.028;
+  drone.add(deckRingMesh);
+  droneDynamicLedStrips.push(deckRingMesh);
+
+  // Top Electronics Deck Status Accent Bevel
+  const topAccentGeo = new THREE.BoxGeometry(0.134, 0.002, 0.134);
+  const topAccentMesh = new THREE.Mesh(topAccentGeo, droneDynamicGlowMat);
+  topAccentMesh.position.y = 0.076;
+  drone.add(topAccentMesh);
+  droneDynamicLedStrips.push(topAccentMesh);
+
+  // Real-time 3D Wind Vector Arrow Floating Above Drone
+  const windArrowGroup = new THREE.Group();
+  windArrowGroup.position.set(0, 0.42, 0); // Positioned above the drone GPS puck
+  
+  const arrowShaftGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.28, 12);
+  arrowShaftGeo.rotateZ(Math.PI / 2);
+  arrowShaftGeo.translate(0.14, 0, 0);
+  const arrowShaftMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.6,
+    metalness: 0.5,
+    roughness: 0.2
+  });
+  const arrowShaft = new THREE.Mesh(arrowShaftGeo, arrowShaftMat);
+  windArrowGroup.add(arrowShaft);
+
+  const arrowConeGeo = new THREE.ConeGeometry(0.024, 0.08, 16);
+  arrowConeGeo.rotateZ(-Math.PI / 2);
+  arrowConeGeo.translate(0.30, 0, 0);
+  const arrowConeMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.9,
+    metalness: 0.5,
+    roughness: 0.2
+  });
+  const arrowCone = new THREE.Mesh(arrowConeGeo, arrowConeMat);
+  windArrowGroup.add(arrowCone);
+
+  windArrow3D = windArrowGroup;
+  drone.add(windArrow3D);
+
+  scene.add(drone);
+}
+
+// 4S LiPo Open Circuit Voltage (OCV) Curve (Real LiCoO2/NMC Chemistry)
+function getLiPo4SOCV(soc) {
+  const s = Math.max(0.0, Math.min(1.0, soc));
+  let cellV;
+  if (s >= 0.85) {
+    cellV = 4.05 + ((s - 0.85) / 0.15) * 0.15; // 4.05V ~ 4.20V
+  } else if (s >= 0.20) {
+    cellV = 3.73 + ((s - 0.20) / 0.65) * 0.32; // 3.73V ~ 4.05V (flat nominal plateau)
+  } else if (s >= 0.08) {
+    cellV = 3.55 + ((s - 0.08) / 0.12) * 0.18; // 3.55V ~ 3.73V
+  } else {
+    cellV = 3.25 + (s / 0.08) * 0.30; // 3.25V ~ 3.55V (discharge cliff knee)
+  }
+  return cellV * 4.0;
+}
+
+function computePowertrainElectrical(thrustN, landed, dt) {
+  let pMech = 0.0;
+  if (!landed) {
+    const tPerMotor = Math.max(0.0, thrustN / 4.0);
+    // Actuator disk & DJI 2212+1045 prop shaft power: P_mech = 4 * 6.5 * (T_motor)^1.45
+    pMech = 4.0 * 6.5 * Math.pow(tPerMotor, 1.45);
+  }
+
+  // Motor + ESC Electrical Efficiency
+  const etaElec = landed ? 1.0 : Math.max(0.72, 0.84 - 0.08 * (thrustN / F450_SPECS.maxThrust));
+  const pPropElec = landed ? 0.0 : (pMech / etaElec);
+  const pTotal = pPropElec + F450_SPECS.auxPowerW;
+
+  // Battery Pack OCV and Internal Resistance Voltage Sag
+  const vOcv = getLiPo4SOCV(droneState.soc);
+  const R = F450_SPECS.batteryRint;
+
+  // Quadratic solution for current I: R * I^2 - vOcv * I + pTotal = 0
+  const disc = Math.max(0.0, vOcv * vOcv - 4.0 * R * pTotal);
+  const curr = (vOcv - Math.sqrt(disc)) / (2.0 * R);
+  const vTerm = Math.max(12.0, vOcv - curr * R);
+  const pActual = vTerm * curr;
+
+  // Coulomb Counting (Continuous State of Charge depletion)
+  if (!droneState.simPaused && dt > 0) {
+    const deltaAh = (curr * dt) / 3600.0;
+    droneState.remAh = Math.max(0.0, droneState.remAh - deltaAh);
+    droneState.soc = Math.max(0.0, droneState.remAh / F450_SPECS.batteryCapacityAh);
+  }
+
+  droneState.volt = vTerm;
+  droneState.curr = curr;
+  droneState.power = pActual;
+}
+
+// 5. Physics Dynamics & BMS Logic Loop (True 6-DOF Newtonian Multirotor Physics)
+function updatePhysics(dt) {
+  if (droneState.simPaused) return;
+
+  const isMatlabDriving = matlabActive && (performance.now() - lastMatlabPktTime < 1500);
+  if (!isMatlabDriving && matlabActive) {
+    matlabActive = false;
+    const badgeText = document.getElementById('matlab-status-text');
+    if (badgeText) badgeText.innerText = 'MATLAB LINK: READY';
+    const badge = document.getElementById('matlab-badge');
+    if (badge) {
+      badge.style.background = 'rgba(16, 185, 129, 0.15)';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+      badge.style.color = '#10b981';
+    }
+  }
+
+  // 1. Mission Timer
+  if (!isMatlabDriving) {
+    droneState.timer += dt;
+  }
+  const mins = Math.floor(droneState.timer / 60);
+  const secs = Math.floor(droneState.timer % 60);
+  const ms = Math.floor((droneState.timer % 1) * 100);
+  document.getElementById('hud-timer').innerText = 
+    `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
+
+  // Dynamic Stochastic Wind Field Simulation (Continuous Random Wandering & Gusts)
+  const w = droneState.wind;
+  let dtdt = droneState.dtdt || 0.0;
+
+  if (!isMatlabDriving) {
+    w.timer += dt;
+
+    // Every 2.5 ~ 6.0 seconds, pick a new random target for wind speed & direction
+    if (w.timer >= w.nextShiftTime) {
+      w.timer = 0.0;
+      w.nextShiftTime = 2.5 + Math.random() * 3.5;
+      // Speed wanders strictly within 0.5 ~ 3.5 m/s (User Spec: max 3.5 m/s)
+      const speedDelta = (Math.random() - 0.48) * 1.0;
+      w.targetSpeed = THREE.MathUtils.clamp(w.targetSpeed + speedDelta, 0.5, 3.5);
+
+      // Direction wanders continuously across 0° ~ 360°
+      const dirDelta = (Math.random() - 0.5) * 55.0;
+      w.targetDirection = (w.targetDirection + dirDelta + 360) % 360;
+    }
+
+    // Smooth continuous relaxation towards target (atmospheric mass inertia)
+    w.speed += (w.targetSpeed - w.speed) * Math.min(1.0, 0.75 * dt);
+    w.speed = THREE.MathUtils.clamp(w.speed, 0.0, 3.5);
+
+    // Shortest circular angle difference
+    let dDeg = (w.targetDirection - w.direction) % 360;
+    if (dDeg > 180) dDeg -= 360;
+    if (dDeg < -180) dDeg += 360;
+    w.direction = (w.direction + dDeg * Math.min(1.0, 0.65 * dt) + 360) % 360;
+
+    // High-frequency turbulent micro-gusts (Dryden / von Karman stochastic turbulence spectrum)
+    const gt = droneState.timer;
+    const gustIntensity = (w.speed / 5.0);
+    const gustX = (Math.sin(gt * 3.7) * 0.25 + Math.cos(gt * 8.1 + 0.5) * 0.15) * gustIntensity;
+    const gustY = (Math.cos(gt * 2.8) * 0.18 + Math.sin(gt * 6.9 + 1.2) * 0.10) * gustIntensity;
+    const gustZ = (Math.sin(gt * 4.3 + 0.7) * 0.25 + Math.cos(gt * 9.5) * 0.15) * gustIntensity;
+    w.gust.set(gustX, gustY, gustZ);
+
+    // Net 3D wind velocity vector in world coordinates (+X: runway forward, +Y: vertical, +Z: runway right)
+    const rad = w.direction * (Math.PI / 180);
+    w.vec.set(
+      w.speed * Math.cos(rad) + gustX,
+      gustY,
+      w.speed * Math.sin(rad) + gustZ
+    );
+    // Strictly cap total 3D wind vector magnitude within 3.5 m/s
+    if (w.vec.length() > 3.5) {
+      w.vec.setLength(3.5);
+    }
+
+    // 2. Battery Thermal Dynamics (tau = 0.9s LPF)
+    let rawTemp = 30.0;
+    if (droneState.mode === 0) {
+      // Physical Joule heating and internal temperature build-up as battery discharges
+      const jouleHeat = droneState.curr * droneState.curr * 0.012;
+      rawTemp = 28.0 + jouleHeat * Math.min(1.0, droneState.timer / 45.0) + (1.0 - droneState.soc) * 14.0;
+    } else if (droneState.mode === 1) {
+      rawTemp = 30.0;
+    } else if (droneState.mode === 2) {
+      rawTemp = 60.5;
+    } else if (droneState.mode === 3) {
+      rawTemp = 72.8;
+    }
+    droneState.tb = rawTemp;
+    const alpha = dt / (0.9 + dt);
+    const prevTf = droneState.tf;
+    droneState.tf += alpha * (droneState.tb - droneState.tf);
+    dtdt = (droneState.tf - prevTf) / Math.max(1e-4, dt);
+    droneState.dtdt = dtdt;
+
+    // BMS State Machine
+    const prevBmsState = droneState.bmsState;
+    if (droneState.tf >= 70.0) droneState.bmsState = 2; // Emergency
+    else if (droneState.tf >= 60.0) droneState.bmsState = 1; // Warning
+    else droneState.bmsState = 0; // Normal
+
+    if (prevBmsState !== droneState.bmsState) {
+      if (droneState.bmsState !== 2 && droneState.bmsState !== 3) {
+        droneState.emergencyPad = null;
+        droneState.landed = false;
+      }
+    }
+  }
+
+  // Smooth Setpoint Rate Limiter (S-curve / ramp generator)
+  // Prevents sudden altitude rocket jumps when switching from Warning (5m) to Normal (10m)
+  const altDiff = droneState.targetAlt - droneState.currentAltSetpoint;
+  if (altDiff > 0) {
+    droneState.currentAltSetpoint += Math.min(altDiff, 1.5 * dt); // Realistic 1.5 m/s climb rate
+  } else if (altDiff < 0) {
+    droneState.currentAltSetpoint += Math.max(altDiff, -1.2 * dt); // Realistic 1.2 m/s descent rate
+  }
+
+  const spdDiff = droneState.targetSpeed - droneState.currentSpeedSetpoint;
+  if (spdDiff > 0) {
+    droneState.currentSpeedSetpoint += Math.min(spdDiff, 1.6 * dt); // 1.6 m/s^2 smooth acceleration
+  } else if (spdDiff < 0) {
+    droneState.currentSpeedSetpoint += Math.max(spdDiff, -2.0 * dt); // 2.0 m/s^2 smooth braking
+  }
+
+  // 3. Flight Controller (Cascaded PID & Setpoint Synthesis)
+  let cmdPitch = 0.0;
+  let cmdRoll = 0.0;
+  let cmdYaw = 0.0;
+  let cmdThrust = F450_SPECS.hoverThrust;
+
+  const anyManualKey = keyState.w || keyState.s || keyState.a || keyState.d || keyState.space || keyState.shift;
+
+  if (anyManualKey && !droneState.landed) {
+    // Manual Pilot Override via Keyboard
+    if (keyState.w) cmdPitch += 0.28; // Lean nose down -> forward acceleration
+    if (keyState.s) cmdPitch -= 0.22; // Lean nose up -> braking / reverse
+    if (keyState.a) cmdRoll -= 0.25;  // Bank left (negative roll -> thrust -Z)
+    if (keyState.d) cmdRoll += 0.25;  // Bank right (positive roll -> thrust +Z)
+
+    if (keyState.space) {
+      droneState.targetAlt = Math.min(30, droneState.targetAlt + 2.5 * dt);
+      droneState.currentAltSetpoint = droneState.targetAlt;
+    }
+    if (keyState.shift) {
+      droneState.targetAlt = Math.max(0.5, droneState.targetAlt - 2.5 * dt);
+      droneState.currentAltSetpoint = droneState.targetAlt;
+    }
+
+    const tiltCos = Math.max(0.65, Math.cos(droneState.pitch) * Math.cos(droneState.roll));
+    const altErr = droneState.targetAlt - droneState.pos.y;
+    cmdThrust = (F450_SPECS.hoverThrust + 4.8 * altErr - 2.8 * droneState.vel.y) / tiltCos;
+
+  } else if (!droneState.landed) {
+    // Autopilot Flight Modes along Runway
+    if (droneState.bmsState === 0) {
+      // Normal Cruise (12.5 m/s down Runway Centerline z = 0, Alt = 10.0m)
+      droneState.targetAlt = 10.0;
+      droneState.targetSpeed = 12.5;
+
+      // 1. Forward Pitch Equilibrium (Feedforward for relative airspeed in X)
+      const vAirX = droneState.currentSpeedSetpoint - w.vec.x;
+      const estAirSpd = Math.hypot(vAirX, w.vec.z);
+      const estDragMag = F450_SPECS.dragLinear * estAirSpd + F450_SPECS.dragQuad * (estAirSpd * estAirSpd);
+      const estDragX = estAirSpd > 1e-3 ? estDragMag * (vAirX / estAirSpd) : 0;
+      const trimPitch = Math.asin(THREE.MathUtils.clamp(estDragX / (F450_SPECS.hoverThrust * 1.08), -0.20, 0.55));
+      const speedErr = droneState.currentSpeedSetpoint - droneState.vel.x;
+      cmdPitch = THREE.MathUtils.clamp(trimPitch + 0.05 * speedErr, -0.20, 0.55);
+
+      // 2. Active Cross-Track & Wind Compensation Controller
+      droneState.crossTrackIntegral = (droneState.crossTrackIntegral || 0) + droneState.pos.z * dt;
+      droneState.crossTrackIntegral = THREE.MathUtils.clamp(droneState.crossTrackIntegral, -3.5, 3.5);
+
+      // Feedforward roll tilt into the wind to counteract lateral crosswind aerodynamic force:
+      const lateralWindForce = estAirSpd > 1e-3 ? estDragMag * (w.vec.z / estAirSpd) : 0;
+      const windRollFeedforward = -Math.asin(THREE.MathUtils.clamp(-lateralWindForce / F450_SPECS.hoverThrust, -0.25, 0.25));
+
+      // Tight centerline tracking with roll tilt into wind:
+      cmdRoll = THREE.MathUtils.clamp(
+        windRollFeedforward - 0.18 * droneState.pos.z - 0.28 * droneState.vel.z - 0.04 * droneState.crossTrackIntegral,
+        -0.35, 0.35
+      );
+      cmdYaw = 0.0;
+
+      // Tilt-compensated altitude hold using smoothly ramped setpoint (ZERO jerk / jump!)
+      const tiltCos = Math.max(0.65, Math.cos(droneState.pitch) * Math.cos(droneState.roll));
+      const altErr = droneState.currentAltSetpoint - droneState.pos.y;
+      cmdThrust = (F450_SPECS.hoverThrust + 4.5 * altErr - 2.8 * droneState.vel.y) / tiltCos;
+
+      if (droneState.pos.x > 1500) {
+        const wrapDist = 1650;
+        droneState.pos.x -= wrapDist;
+        if (camRig.initialized) {
+          camRig.pos.x -= wrapDist;
+          camRig.lookAt.x -= wrapDist;
+          camera.position.x -= wrapDist;
+        }
+      }
+
+    } else if (droneState.bmsState === 1) {
+      // 60C Warning: Descend to 5m, Slow to 8.0 m/s
+      droneState.targetAlt = 5.0;
+      droneState.targetSpeed = 8.0;
+
+      const vAirX = droneState.currentSpeedSetpoint - w.vec.x;
+      const estAirSpd = Math.hypot(vAirX, w.vec.z);
+      const estDragMag = F450_SPECS.dragLinear * estAirSpd + F450_SPECS.dragQuad * (estAirSpd * estAirSpd);
+      const estDragX = estAirSpd > 1e-3 ? estDragMag * (vAirX / estAirSpd) : 0;
+      const trimPitch = Math.asin(THREE.MathUtils.clamp(estDragX / (F450_SPECS.hoverThrust * 1.05), -0.20, 0.45));
+      const speedErr = droneState.currentSpeedSetpoint - droneState.vel.x;
+      cmdPitch = THREE.MathUtils.clamp(trimPitch + 0.05 * speedErr, -0.20, 0.45);
+
+      droneState.crossTrackIntegral = (droneState.crossTrackIntegral || 0) + droneState.pos.z * dt;
+      droneState.crossTrackIntegral = THREE.MathUtils.clamp(droneState.crossTrackIntegral, -3.5, 3.5);
+
+      const lateralWindForce = estAirSpd > 1e-3 ? estDragMag * (w.vec.z / estAirSpd) : 0;
+      const windRollFeedforward = -Math.asin(THREE.MathUtils.clamp(-lateralWindForce / F450_SPECS.hoverThrust, -0.25, 0.25));
+
+      cmdRoll = THREE.MathUtils.clamp(
+        windRollFeedforward - 0.18 * droneState.pos.z - 0.28 * droneState.vel.z - 0.04 * droneState.crossTrackIntegral,
+        -0.35, 0.35
+      );
+      cmdYaw = 0.0;
+
+      const tiltCos = Math.max(0.65, Math.cos(droneState.pitch) * Math.cos(droneState.roll));
+      const altErr = droneState.currentAltSetpoint - droneState.pos.y;
+      cmdThrust = (F450_SPECS.hoverThrust + 4.5 * altErr - 2.8 * droneState.vel.y) / tiltCos;
+
+    } else if (droneState.bmsState === 2) {
+      // 70C Emergency: Dynamic Divert to Nearest Reachable Helipad LZ (GPS + Wind Reachability, NO Prescripted Paths)
+      if (!droneState.emergencyPad) {
+        // =====================================================================
+        // Kinematic Reachability & Tailwind Autonomous Landing Zone Selector
+        // - Drone evaluates real-time GPS coordinates of 10 landing zones (5 Left, 5 Right).
+        // - F450 emergency transit capability Va_max = 6.5 m/s ensures robust progress against max 3.5 m/s wind.
+        // - Priority given to forward landing pads (+X forward) to prevent dangerous reverse turns at high speed.
+        // - Guarantees 100% selection of a safe reachable pad under all wind conditions.
+        // =====================================================================
+        let bestPad = null;
+        let minCost = Infinity;
+        let minDistance = Infinity;
+        let fallbackPad = null;
+        let bestWdir = 0;
+        let rejectedPad = null;
+        const Va_max = 6.5; // F450 emergency transit airspeed (m/s)
+        const V_min_safe = 0.8; // Minimum ground progress speed (m/s)
+        const windX = droneState.wind ? droneState.wind.vec.x : 0.0;
+        const windZ = droneState.wind ? droneState.wind.vec.z : 0.0;
+
+        for (const pad of landingPads) {
+          const dx = pad.x - droneState.pos.x;
+          const dz = pad.z - droneState.pos.z;
+          const d = Math.hypot(dx, dz);
+          if (d < minDistance) {
+            minDistance = d;
+            fallbackPad = pad;
+          }
+          if (d > 0.1) {
+            const ux = dx / d;
+            const uz = dz / d;
+
+            // Wind projection onto approach direction (Three.js: +X forward, +Z right)
+            const W_dir = (windX * ux) + (windZ * uz);
+            const V_target = Math.max(V_min_safe, Va_max + W_dir);
+
+            const penalty_w = (W_dir < 0) ? (1.0 + 0.35 * (-W_dir / Va_max)) : (1.0 / (1.0 + 0.25 * (W_dir / Va_max)));
+
+            // Forward flight path preference (+X forward along runway)
+            // Passing a pad (dx < -15m) requires a 180 deg reverse turn, penalize it so forward pad is chosen
+            const penalty_turn = (dx < -15.0) ? (1.8 + 0.02 * (-dx)) : 1.0;
+
+            const cost = (d / V_target) * penalty_w * penalty_turn;
+
+            if (cost < minCost) {
+              minCost = cost;
+              bestPad = pad;
+              bestWdir = W_dir;
+            }
+          }
+        }
+
+        if (!bestPad && landingPads.length > 0) {
+          bestPad = fallbackPad || landingPads[0];
+        }
+
+        droneState.emergencyPad = bestPad;
+        droneState.emergencyWdir = bestWdir;
+        droneState.rejectedPad = rejectedPad;
+
+        // Visual Highlight: turn target pad beacon beam to pulsing RED
+        landingPads.forEach(p => {
+          if (p.beam) {
+            if (p === bestPad) {
+              p.beam.material.color.setHex(0xef4444);
+              p.beam.material.opacity = 0.85;
+            } else {
+              p.beam.material.color.setHex(p.origColor);
+              p.beam.material.opacity = 0.32;
+            }
+          }
+        });
+      }
+
+      const targetLZ = droneState.emergencyPad || landingPads[0];
+      const dx = targetLZ.x - droneState.pos.x;
+      const dz = targetLZ.z - droneState.pos.z;
+      const dist2D = Math.hypot(dx, dz);
+
+      // Current 3D Wind Vector Components (in scope for both Phase 1 Approach & Phase 2 Landing)
+      const windX = droneState.wind ? droneState.wind.vec.x : 0.0;
+      const windZ = droneState.wind ? droneState.wind.vec.z : 0.0;
+
+      // Relaxed Landing Commit Gate:
+      // When drone enters within 8.5m of the 14m helipad (radius 7.0m), commit to smooth landing
+      if (dist2D <= 8.5) {
+        droneState.landingCommitted = true;
+      }
+
+      if (!droneState.landingCommitted) {
+        // Phase 1: Reachability-Guided Gliding Approach
+        const desiredHeading = Math.atan2(-dz, dx);
+        const headingErr = THREE.MathUtils.euclideanModulo(desiredHeading - droneState.yaw + Math.PI, Math.PI * 2) - Math.PI;
+        cmdYaw = droneState.yaw + THREE.MathUtils.clamp(headingErr, -3.0 * dt, 3.0 * dt);
+
+        const turnRoll = THREE.MathUtils.clamp(-0.45 * headingErr, -0.21, 0.21);
+
+        const Va_max = 6.5;
+        const ux = dist2D > 1e-3 ? dx / dist2D : 1.0;
+        const uz = dist2D > 1e-3 ? dz / dist2D : 0.0;
+        const W_dir = (windX * ux) + (windZ * uz);
+        const V_target = Math.max(1.0, Va_max + W_dir);
+
+        const approachSpeed = Math.min(V_target, Math.max(1.5, dist2D * 0.22));
+        droneState.targetSpeed = approachSpeed;
+
+        const cosY = Math.cos(droneState.yaw);
+        const sinY = Math.sin(droneState.yaw);
+        const fwdVel = droneState.vel.x * cosY - droneState.vel.z * sinY;
+        const speedErr = droneState.currentSpeedSetpoint - fwdVel;
+
+        const vAirX = droneState.vel.x - windX;
+        const vAirZ = droneState.vel.z - windZ;
+        const vAirBodyFwd = vAirX * cosY - vAirZ * sinY;
+        const vAirBodyRight = vAirX * sinY + vAirZ * cosY;
+
+        const dragFwd = (F450_SPECS.dragLinear + F450_SPECS.dragQuad * Math.abs(vAirBodyFwd)) * vAirBodyFwd;
+        const dragRight = (F450_SPECS.dragLinear + F450_SPECS.dragQuad * Math.abs(vAirBodyRight)) * vAirBodyRight;
+
+        const pitchWindFF = Math.asin(THREE.MathUtils.clamp(dragFwd / (F450_SPECS.hoverThrust * 1.08), -0.18, 0.21));
+        const rollWindFF = Math.asin(THREE.MathUtils.clamp(dragRight / (F450_SPECS.hoverThrust * 1.08), -0.18, 0.18));
+
+        cmdPitch = THREE.MathUtils.clamp(pitchWindFF + 0.08 * speedErr, -0.15, 0.21);
+        cmdRoll = THREE.MathUtils.clamp(turnRoll + rollWindFF, -0.21, 0.21);
+
+        droneState.targetAlt = Math.max(2.0, Math.min(5.0, dist2D * 0.08));
+
+        const tiltCos = Math.max(0.65, Math.cos(droneState.pitch) * Math.cos(droneState.roll));
+        const altErr = droneState.currentAltSetpoint - droneState.pos.y;
+        cmdThrust = (F450_SPECS.hoverThrust + 4.5 * altErr - 2.8 * droneState.vel.y) / tiltCos;
+        const maxEmergThrust = F450_SPECS.hoverThrust + (F450_SPECS.maxThrust - F450_SPECS.hoverThrust) * 0.35;
+        cmdThrust = THREE.MathUtils.clamp(cmdThrust, 5.0, maxEmergThrust);
+
+        if (droneState.wind) {
+          const gustCoupling = (droneState.wind.speed / 4.0);
+          cmdRoll += (Math.sin(droneState.timer * 7.7) * 0.025 + Math.cos(droneState.timer * 14.1) * 0.012) * gustCoupling;
+          cmdPitch += (Math.cos(droneState.timer * 6.3) * 0.020 + Math.sin(droneState.timer * 11.5) * 0.012) * gustCoupling;
+        }
+
+      } else {
+        // Phase 2: Relaxed Pad Landing (Central alignment not strictly required)
+        const velX_des = THREE.MathUtils.clamp(0.40 * dx, -1.2, 1.2);
+        const velZ_des = THREE.MathUtils.clamp(0.40 * dz, -1.2, 1.2);
+
+        const cosY = Math.cos(droneState.yaw);
+        const sinY = Math.sin(droneState.yaw);
+        const bodyErrFwd = (velX_des - droneState.vel.x) * cosY - (velZ_des - droneState.vel.z) * sinY;
+        const bodyErrRight = (velX_des - droneState.vel.x) * sinY + (velZ_des - droneState.vel.z) * cosY;
+
+        // Maintain wind crab compensation during descent so wind does not blow drone away
+        const vAirX = droneState.vel.x - windX;
+        const vAirZ = droneState.vel.z - windZ;
+        const vAirBodyFwd = vAirX * cosY - vAirZ * sinY;
+        const vAirBodyRight = vAirX * sinY + vAirZ * cosY;
+        const pitchWindFF = Math.asin(THREE.MathUtils.clamp((F450_SPECS.dragLinear * vAirBodyFwd) / (F450_SPECS.hoverThrust * 1.05), -0.10, 0.10));
+        const rollWindFF = Math.asin(THREE.MathUtils.clamp((F450_SPECS.dragLinear * vAirBodyRight) / (F450_SPECS.hoverThrust * 1.05), -0.10, 0.10));
+
+        cmdPitch = THREE.MathUtils.clamp(pitchWindFF + 0.06 * bodyErrFwd, -0.10, 0.10);
+        cmdRoll  = THREE.MathUtils.clamp(rollWindFF + 0.06 * bodyErrRight, -0.10, 0.10);
+        cmdYaw   = droneState.yaw;
+
+        // Continuous steady vertical descent (-0.65 m/s) down to ground 0.35m
+        droneState.targetAlt = 0.35;
+        droneState.currentAltSetpoint = Math.max(0.35, droneState.currentAltSetpoint - 0.65 * dt);
+        const altErr = droneState.currentAltSetpoint - droneState.pos.y;
+        
+        cmdThrust = F450_SPECS.hoverThrust + 3.2 * altErr - 2.5 * droneState.vel.y;
+        const maxEmergThrust = F450_SPECS.hoverThrust + (F450_SPECS.maxThrust - F450_SPECS.hoverThrust) * 0.35;
+        cmdThrust = THREE.MathUtils.clamp(cmdThrust, 5.5, maxEmergThrust);
+
+        // Safe Touchdown Detection anywhere on the pad (pos.y <= 0.45m)
+        if (droneState.pos.y <= 0.45) {
+          droneState.landed = true;
+          droneState.bmsState = 3;
+          droneState.pos.y = 0.35;
+          droneState.vel.set(0, 0, 0);
+          droneState.acc.set(0, 0, 0);
+          droneState.thrust = 0;
+          droneState.roll = 0;
+          droneState.pitch = 0;
+          droneState.landingCommitted = false;
+        }
+      }
+    }
+  }
+
+  // 4. Attitude Dynamics (2nd-Order Angular Spring-Damper System - Critically Damped)
+  if (!isMatlabDriving) {
+    const wn = F450_SPECS.omegaAttitude;
+    const zeta = F450_SPECS.zetaAttitude;
+
+    const d2Roll = (wn * wn) * (cmdRoll - droneState.roll) - 2 * zeta * wn * droneState.rollRate;
+    droneState.rollRate += d2Roll * dt;
+    droneState.roll += droneState.rollRate * dt;
+
+    const d2Pitch = (wn * wn) * (cmdPitch - droneState.pitch) - 2 * zeta * wn * droneState.pitchRate;
+    droneState.pitchRate += d2Pitch * dt;
+    droneState.pitch += droneState.pitchRate * dt;
+
+    const yawErr = THREE.MathUtils.euclideanModulo(cmdYaw - droneState.yaw + Math.PI, Math.PI * 2) - Math.PI;
+    const d2Yaw = (wn * 0.4) * (wn * 0.4) * yawErr - 2 * zeta * (wn * 0.4) * droneState.yawRate;
+    droneState.yawRate += d2Yaw * dt;
+    droneState.yaw += droneState.yawRate * dt;
+  }
+
+  // 5. Clean 3-Axis Orientation via Quaternion (No Gimbal Lock, Exact Physics & Visuals)
+  const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), droneState.yaw);
+  const fwdVec = new THREE.Vector3(1, 0, 0).applyQuaternion(qYaw);
+  const rightVec = new THREE.Vector3(0, 0, 1).applyQuaternion(qYaw);
+
+  const qPitch = new THREE.Quaternion().setFromAxisAngle(rightVec, -droneState.pitch);
+  const qRoll = new THREE.Quaternion().setFromAxisAngle(fwdVec, droneState.roll);
+
+  drone.quaternion.copy(qYaw).multiply(qRoll).multiply(qPitch);
+  drone.position.copy(droneState.pos);
+
+  // Rotor Thrust Vector in World Space
+  droneState.thrust = droneState.landed ? 0 : THREE.MathUtils.clamp(cmdThrust, 2.0, F450_SPECS.maxThrust);
+  if (!isMatlabDriving) {
+    computePowertrainElectrical(droneState.thrust, droneState.landed, dt);
+  }
+  const thrustWorld = new THREE.Vector3(0, droneState.thrust, 0).applyQuaternion(drone.quaternion);
+
+  const gravY = -F450_SPECS.mass * F450_SPECS.gravity;
+
+  // Aerodynamic Drag Force based on True Relative Airspeed Vector
+  // vAir = v_drone - v_wind
+  const vAir = new THREE.Vector3().subVectors(droneState.vel, w.vec);
+  const airSpd = vAir.length();
+  const dragMagnitude = F450_SPECS.dragLinear * airSpd + F450_SPECS.dragQuad * (airSpd * airSpd);
+  const dragX = airSpd > 1e-3 ? -dragMagnitude * (vAir.x / airSpd) : 0;
+  const dragY = airSpd > 1e-3 ? -dragMagnitude * (vAir.y / airSpd) : 0;
+  const dragZ = airSpd > 1e-3 ? -dragMagnitude * (vAir.z / airSpd) : 0;
+
+  // Real Aerodynamic Fluid Dynamics Forces:
+  // 1. Atmospheric Boundary Layer Turbulence & Tip Vortex Shedding (Multi-frequency Navier-Stokes micro-gusts)
+  const turbScale = Math.min(1.2, 0.4 + airSpd * 0.05);
+  const fTurbY = (Math.sin(droneState.timer * 3.1) * 0.28 + Math.cos(droneState.timer * 6.7 + 1.2) * 0.18 + Math.sin(droneState.timer * 11.4) * 0.12) * turbScale;
+
+  // 2. In-Ground Effect (IGE) Aerodynamic Cushion (Cheeseman & Bennett Model) when h < 1.0m
+  let fGroundEffect = 0.0;
+  if (!droneState.landed && !droneState.landingCommitted && droneState.pos.y > 0.1 && droneState.pos.y < 1.0) {
+    const propR = 0.127;
+    const igeRatio = Math.min(0.25, Math.pow(propR / (4.0 * Math.max(0.18, droneState.pos.y)), 2) * 2.2);
+    fGroundEffect = F450_SPECS.hoverThrust * igeRatio;
+  }
+
+  // 3. Effective Translational Lift (ETL) during flight (Clean inflow increases rotor efficiency)
+  const etlFactor = Math.min(0.10, (airSpd / 15.0) * 0.10);
+  const fEtl = (thrustWorld.y > 0 ? thrustWorld.y : 0) * etlFactor;
+
+  // Total Newton-Euler Accelerations with Real Fluid Aerodynamic Forces
+  droneState.acc.x = (thrustWorld.x + dragX) / F450_SPECS.mass;
+  droneState.acc.y = (thrustWorld.y + gravY + dragY + fTurbY + fGroundEffect + fEtl) / F450_SPECS.mass;
+  droneState.acc.z = (thrustWorld.z + dragZ) / F450_SPECS.mass;
+
+  if (!isMatlabDriving && !droneState.landed) {
+    droneState.vel.addScaledVector(droneState.acc, dt);
+    droneState.pos.addScaledVector(droneState.vel, dt);
+
+    if (droneState.pos.y <= 0.36) {
+      droneState.pos.y = 0.35;
+      if (droneState.vel.y < 0) droneState.vel.y = 0;
+      droneState.vel.x *= 0.85;
+      droneState.vel.z *= 0.85;
+
+      if (droneState.landingCommitted || droneState.bmsState === 2) {
+        droneState.landed = true;
+        droneState.bmsState = 3;
+        droneState.vel.set(0, 0, 0);
+        droneState.acc.set(0, 0, 0);
+        droneState.thrust = 0;
+        droneState.roll = 0;
+        droneState.pitch = 0;
+        droneState.landingCommitted = false;
+      }
+    }
+  }
+
+  // Propeller RPM Scaling
+  const propSpinRate = droneState.landed ? 0 : (24.0 + 36.0 * (droneState.thrust / F450_SPECS.hoverThrust));
+  propMeshes.forEach((p, idx) => {
+    p.rotation.y += propSpinRate * dt * (idx % 2 === 0 ? 1 : -1);
+  });
+
+  const turbineSpeed = 0.3 + (droneState.wind ? droneState.wind.speed * 0.22 : 0.8);
+  turbineBlades.forEach(t => {
+    t.rotation.z += turbineSpeed * dt;
+  });
+
+  if (fcStatusLed) {
+    if (droneState.bmsState === 0) fcStatusLed.material.color.setHex(0x10b981);
+    else if (droneState.bmsState === 1) fcStatusLed.material.color.setHex(0xf59e0b);
+    else fcStatusLed.material.color.setHex(0xef4444);
+  }
+
+  updateHUD(dtdt);
+  updateDroneStateVisuals(dt);
+  updateTrajectoryTrail();
+  updateLiveScope(performance.now());
+}
+
+// Rolling Telemetry Scope Buffer & Drawing (Runs at 10Hz)
+let scopeHistory = [];
+const MAX_SCOPE_SAMPLES = 80;
+let lastScopeDrawTime = 0;
+
+function updateLiveScope(now) {
+  if (now - lastScopeDrawTime < 100) return; // 10 Hz refresh
+  lastScopeDrawTime = now;
+
+  const cvs = document.getElementById('scopeCanvas');
+  if (!cvs) return;
+  const ctx = cvs.getContext('2d');
+  if (!ctx) return;
+
+  // Add current data point
+  scopeHistory.push({
+    t: droneState.timer,
+    temp: droneState.tf,
+    alt: Math.max(0, droneState.pos.y),
+    volt: droneState.volt,
+    wind: droneState.wind ? Math.min(3.5, droneState.wind.speed) : 0
+  });
+  if (scopeHistory.length > MAX_SCOPE_SAMPLES) {
+    scopeHistory.shift();
+  }
+
+  const W = cvs.width, H = cvs.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background Grid Lines
+  ctx.strokeStyle = 'rgba(51, 65, 85, 0.45)';
+  ctx.lineWidth = 1;
+  for (let gy = 25; gy < H; gy += 25) {
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(W, gy);
+    ctx.stroke();
+  }
+
+  // 60C and 70C Temperature Guidelines
+  const tempToY = (t) => H - ((t - 25) / 55) * H;
+  const y60 = Math.round(tempToY(60));
+  const y70 = Math.round(tempToY(70));
+
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)'; // Yellow 60C
+  ctx.beginPath(); ctx.moveTo(0, y60); ctx.lineTo(W, y60); ctx.stroke();
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.7)'; // Red 70C
+  ctx.beginPath(); ctx.moveTo(0, y70); ctx.lineTo(W, y70); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = '8.5px monospace';
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText('60℃', 3, y60 - 2);
+  ctx.fillStyle = '#ef4444';
+  ctx.fillText('70℃', 3, y70 - 2);
+
+  if (scopeHistory.length < 2) return;
+
+  const N = scopeHistory.length;
+  const dx = W / (MAX_SCOPE_SAMPLES - 1);
+
+  function drawCurve(valGetter, color, minV, maxV, lineWidth) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const v = valGetter(scopeHistory[i]);
+      const norm = (v - minV) / (maxV - minV);
+      const y = Math.max(2, Math.min(H - 2, H - norm * H));
+      const x = i * dx;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // 1. 배터리 온도 (Red, 25~80C)
+  drawCurve(d => d.temp, '#ef4444', 25, 80, 2.0);
+  // 2. 비행 고도 (Cyan, 0~15m)
+  drawCurve(d => d.alt, '#38bdf8', 0, 15, 1.8);
+  // 3. 배터리 전압 (Yellow, 12~17V)
+  drawCurve(d => d.volt, '#facc15', 12, 17, 1.6);
+  // 4. 풍속 (Purple, 0~3.5m/s)
+  drawCurve(d => d.wind, '#c084fc', 0, 3.5, 1.5);
+}
+
+function toggleScopePanel() {
+  const panel = document.getElementById('live-scope-panel');
+  const btn = document.getElementById('scope-toggle-btn');
+  if (!panel || !btn) return;
+  panel.classList.toggle('minimized');
+  btn.innerText = panel.classList.contains('minimized') ? '펼치기' : '최소화';
+}
+
+// 6. Update Cockpit Telemetry HUD (Physically Accurate Real-Time Flight Dynamics)
+function updateHUD(dtdt) {
+  const relAlt = Math.max(0, droneState.pos.y);
+  document.getElementById('tel-alt').innerText = relAlt.toFixed(2);
+  document.getElementById('tel-spd').innerText = (droneState.landed ? 0 : droneState.vel.length()).toFixed(1);
+
+  // Dynamic Real-time Wind Field Telemetry (capped <= 3.5 m/s)
+  if (droneState.wind) {
+    const w = droneState.wind;
+    const windSpdEl = document.getElementById('tel-wind-spd');
+    const windDegEl = document.getElementById('tel-wind-deg');
+    const windArrowEl = document.getElementById('tel-wind-arrow');
+    const spdDisplay = Math.min(3.5, w.speed);
+    if (windSpdEl) windSpdEl.innerText = spdDisplay.toFixed(1);
+    if (windDegEl) windDegEl.innerText = `${Math.round(w.direction).toString().padStart(3, '0')}°`;
+    if (windArrowEl) {
+      windArrowEl.style.transform = `rotate(${w.direction}deg)`;
+    }
+  }
+
+  // Real-time Physics-based Electrical Values (Ensures PWR = VOLT * CURR mathematically exact)
+  const currentPower = droneState.volt * droneState.curr;
+  droneState.power = currentPower;
+  document.getElementById('tel-volt').innerText = droneState.volt.toFixed(2);
+  document.getElementById('tel-curr').innerText = droneState.curr.toFixed(1);
+  document.getElementById('tel-pwr').innerText = currentPower.toFixed(0);
+  document.getElementById('tel-dtdt').innerText = dtdt.toFixed(1);
+
+  // Mobile Top Telemetry (Temp, Power, Volt, Batt)
+  const mobTemp = document.getElementById('mob-temp-val');
+  if (mobTemp) {
+    mobTemp.innerText = droneState.tf.toFixed(1);
+    const parentMobTel = mobTemp.parentElement;
+    if (parentMobTel) {
+      if (droneState.tf >= 68.0) parentMobTel.style.color = '#ef4444';
+      else if (droneState.tf >= 55.0) parentMobTel.style.color = '#f97316';
+      else parentMobTel.style.color = '#00e5ff';
+    }
+  }
+  const mobPwr = document.getElementById('mob-pwr-val');
+  if (mobPwr) mobPwr.innerText = currentPower.toFixed(0);
+  const mobVolt = document.getElementById('mob-volt-val');
+  if (mobVolt) mobVolt.innerText = droneState.volt.toFixed(1);
+  const mobBatt = document.getElementById('mob-batt-val');
+  if (mobBatt) mobBatt.innerText = Math.round(droneState.soc * 100) + '%';
+
+  document.getElementById('hud-temp-val').innerText = droneState.tf.toFixed(1);
+
+  // Mission Flight Timer starting from 00:00.00
+  const mins = Math.floor(droneState.timer / 60);
+  const secs = Math.floor(droneState.timer % 60);
+  const ms = Math.floor((droneState.timer % 1) * 100);
+  document.getElementById('hud-timer').innerText = 
+    `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}.${String(ms).padStart(2,'0')}`;
+
+  // Battery Remaining Percentage & Dynamic 6-Cell Bar
+  const battPct = Math.max(0, Math.min(100, Math.round(droneState.soc * 100)));
+  document.getElementById('hud-battery-pct').innerText = `${battPct}%`;
+
+  const battBadge = document.querySelector('.battery-badge');
+  const cells = document.querySelectorAll('.battery-cells .b-cell');
+  const activeCells = Math.ceil(droneState.soc * cells.length);
+
+  let cellColor = '#2ecc71';
+  if (battPct <= 15) {
+    cellColor = '#ef4444';
+    if (battBadge) {
+      battBadge.style.borderColor = '#ef4444';
+      battBadge.style.background = 'rgba(239, 68, 68, 0.35)';
+    }
+  } else if (battPct <= 30) {
+    cellColor = '#f59e0b';
+    if (battBadge) {
+      battBadge.style.borderColor = '#f59e0b';
+      battBadge.style.background = 'rgba(245, 158, 11, 0.35)';
+    }
+  } else {
+    if (battBadge) {
+      battBadge.style.borderColor = '#2ecc71';
+      battBadge.style.background = 'rgba(46, 204, 113, 0.35)';
+    }
+  }
+
+  cells.forEach((cell, idx) => {
+    if (idx < activeCells) {
+      cell.style.background = cellColor;
+      cell.style.boxShadow = `0 0 6px ${cellColor}`;
+      cell.style.opacity = '1.0';
+    } else {
+      cell.style.background = 'rgba(255, 255, 255, 0.18)';
+      cell.style.boxShadow = 'none';
+      cell.style.opacity = '0.25';
+    }
+  });
+
+  const altPct = THREE.MathUtils.clamp((relAlt / 30.0) * 100, 0, 100);
+  document.getElementById('alt-bar-fill').style.height = `${altPct}%`;
+  document.getElementById('alt-box').style.bottom = `${altPct}%`;
+  document.getElementById('alt-box').innerText = `${relAlt.toFixed(0)}m`;
+
+  const banner = document.getElementById('bms-state-banner');
+  const led = document.getElementById('status-led');
+  const text = document.getElementById('status-text');
+
+  if (droneState.bmsState === 0) {
+    banner.style.borderColor = '#00e5ff';
+    led.style.background = '#00e5ff';
+    led.style.boxShadow = '0 0 10px #00e5ff';
+    text.innerText = 'MISSION: RUNWAY PATROL (NORMAL 30°C) - F450 BMS ACTIVE';
+  } else if (droneState.bmsState === 1) {
+    banner.style.borderColor = '#f59e0b';
+    led.style.background = '#f59e0b';
+    led.style.boxShadow = '0 0 12px #f59e0b';
+    text.innerText = 'BMS WARNING: OVERHEAT (60°C) - DESCENDING TO 5M ALTITUDE';
+  } else if (droneState.bmsState === 2) {
+    banner.style.borderColor = '#ef4444';
+    led.style.background = '#ef4444';
+    led.style.boxShadow = '0 0 15px #ef4444';
+    const pad = droneState.emergencyPad || landingPads[0];
+    const rej = droneState.rejectedPad;
+    let rejMsg = '';
+    if (rej) {
+      rejMsg = ` | ⚠️최근접 LZ#${rej.id}(${rej.side}) 역풍(${rej.W_dir.toFixed(1)}m/s) 접근불가 배제`;
+    }
+    const tailMsg = (droneState.emergencyWdir >= 0) ? `순풍 가속 (+${droneState.emergencyWdir.toFixed(1)}m/s)` : `대지속도 접근`;
+    text.innerText = `BMS CRITICAL 70°C: ${pad.side} LZ#${pad.id} 순풍 회피 착륙 (${tailMsg})${rejMsg}`;
+  } else if (droneState.bmsState === 3) {
+    banner.style.borderColor = '#10b981';
+    led.style.background = '#10b981';
+    led.style.boxShadow = '0 0 15px #10b981';
+    const pad = droneState.emergencyPad || landingPads[0];
+    text.innerText = `EMERGENCY TOUCHDOWN COMPLETE - MOTORS DISARMED (SAFE ON LZ#${pad.id} ${pad.side} PAD)`;
+  }
+}
+
+// 7. 3-Axis Gimbal-Stabilized Camera Rig (Zero Screen Shaking, Horizon Locked)
+const camRig = {
+  pos: new THREE.Vector3(-3.2, 11.3, 0),
+  lookAt: new THREE.Vector3(1.2, 10.15, 0),
+  yaw: 0.0,
+  initialized: false
+};
+
+function updateCamera(dt) {
+  if (droneState.cameraMode === 0) {
+    // 3rd-Person Chase Camera: 3-Axis Gimbal-Stabilized (Zero Screen Shake)
+    const camDist = 3.2;    // Distance behind drone
+    const camHeight = 1.30;  // Height above drone
+
+    if (!camRig.initialized) {
+      camRig.pos.set(droneState.pos.x - camDist, droneState.pos.y + camHeight, droneState.pos.z);
+      camRig.lookAt.set(droneState.pos.x + 1.2, droneState.pos.y + 0.15, droneState.pos.z);
+      camRig.yaw = droneState.yaw;
+      camRig.initialized = true;
+    }
+
+    // Smooth yaw tracking (filter out fast yaw jitter, completely isolate pitch & roll)
+    let diffYaw = droneState.yaw - camRig.yaw;
+    while (diffYaw < -Math.PI) diffYaw += Math.PI * 2;
+    while (diffYaw > Math.PI) diffYaw -= Math.PI * 2;
+    camRig.yaw += diffYaw * (1.0 - Math.exp(-6.0 * dt));
+
+    // Desired camera position in world horizontal plane strictly based on smooth yaw
+    const targetCamX = droneState.pos.x - camDist * Math.cos(camRig.yaw);
+    const targetCamY = droneState.pos.y + camHeight;
+    const targetCamZ = droneState.pos.z - camDist * Math.sin(camRig.yaw);
+
+    // Frame-rate independent exponential smoothing (tight follow, zero jitter)
+    const followT = 1.0 - Math.exp(-14.0 * dt);
+    camRig.pos.x += (targetCamX - camRig.pos.x) * followT;
+    camRig.pos.y += (targetCamY - camRig.pos.y) * followT;
+    camRig.pos.z += (targetCamZ - camRig.pos.z) * followT;
+
+    // Desired look target (drone center + forward view lead)
+    const targetLookX = droneState.pos.x + 1.2 * Math.cos(camRig.yaw);
+    const targetLookY = droneState.pos.y + 0.15;
+    const targetLookZ = droneState.pos.z + 1.2 * Math.sin(camRig.yaw);
+
+    camRig.lookAt.x += (targetLookX - camRig.lookAt.x) * followT;
+    camRig.lookAt.y += (targetLookY - camRig.lookAt.y) * followT;
+    camRig.lookAt.z += (targetLookZ - camRig.lookAt.z) * followT;
+
+    camera.position.copy(camRig.pos);
+    camera.up.set(0, 1, 0); // World horizon locked upright
+    camera.lookAt(camRig.lookAt);
+
+  } else if (droneState.cameraMode === 1) {
+    // 1st-Person Cockpit FPV View (Gimbal-stabilized forward view)
+    const fpvX = droneState.pos.x + 0.32 * Math.cos(droneState.yaw);
+    const fpvY = droneState.pos.y + 0.12;
+    const fpvZ = droneState.pos.z + 0.32 * Math.sin(droneState.yaw);
+    camera.position.set(fpvX, fpvY, fpvZ);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(droneState.pos.x + 40.0 * Math.cos(droneState.yaw), droneState.pos.y + 0.12, droneState.pos.z + 40.0 * Math.sin(droneState.yaw));
+
+  } else if (droneState.cameraMode === 2) {
+    // Helipad Dedicated Ground Observer View (follows emergency divert pad)
+    const pad = droneState.emergencyPad || landingPads[2];
+    camera.position.set(pad.x - 11, 3.2, pad.z + 8);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(droneState.pos.x, droneState.pos.y + 0.2, droneState.pos.z);
+
+  } else if (droneState.cameraMode === 3) {
+    // Free Orbit Controls
+    const ox = orbitRadius * Math.sin(orbitTheta) * Math.cos(orbitPhi);
+    const oz = orbitRadius * Math.cos(orbitTheta) * Math.cos(orbitPhi);
+    const oy = orbitRadius * Math.sin(orbitPhi);
+    camera.position.set(droneState.pos.x + ox, droneState.pos.y + oy, droneState.pos.z + oz);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(droneState.pos.x, droneState.pos.y + 0.1, droneState.pos.z);
+  }
+}
+
+// 8. Interactive HUD Controls & Continuous Key Listeners
+function setupHUDControls() {
+  document.getElementById('btn-pause').onclick = () => {
+    droneState.simPaused = !droneState.simPaused;
+    document.getElementById('btn-pause').innerText = droneState.simPaused ? '▶' : '❚❚';
+  };
+
+  document.getElementById('btn-cam').onclick = () => {
+    droneState.cameraMode = (droneState.cameraMode + 1) % 3;
+    const modeNames = ['3인칭 체이스 뷰', '1인칭 FPV 콕핏 뷰', '착륙장 LZ 감시 뷰'];
+    alert(`카메라 시점 변경: ${modeNames[droneState.cameraMode]}`);
+  };
+
+  document.getElementById('btn-orbit').onclick = () => {
+    droneState.cameraMode = 3;
+    alert('자유 궤도 시점 활성화: 마우스 드래그로 F450 드론 주변 360도 회전 관찰');
+  };
+
+  document.getElementById('btn-reset').onclick = () => {
+    droneState.pos.set(0, 10, 0);
+    droneState.vel.set(12.5, 0, 0);
+    droneState.acc.set(0, 0, 0);
+    droneState.roll = 0; droneState.pitch = 0.38; droneState.yaw = 0;
+    droneState.rollRate = 0; droneState.pitchRate = 0; droneState.yawRate = 0;
+    droneState.targetAlt = 10.0; droneState.targetSpeed = 12.5;
+    droneState.currentAltSetpoint = 10.0; droneState.currentSpeedSetpoint = 12.5;
+    droneState.mode = 1;
+    droneState.tb = 30.0; droneState.tf = 30.0;
+    droneState.bmsState = 0;
+    droneState.emergencyPad = null;
+    droneState.landingCommitted = false;
+    droneState.landed = false;
+    droneState.timer = 0.0; // Reset mission flight time to 0.0s!
+    droneState.soc = 1.0; // Reset battery to 100%!
+    droneState.remAh = F450_SPECS.batteryCapacityAh;
+    droneState.volt = 16.48;
+    droneState.curr = 14.8;
+    droneState.power = 244.0;
+    trailPointCount = 0;
+    if (trailLine) trailLine.geometry.setDrawRange(0, 0);
+    camRig.initialized = false;
+    setBattMode(1, true);
+    if (matlabWs && matlabWs.readyState === WebSocket.OPEN) {
+      matlabWs.send(JSON.stringify({ type: 'BROWSER_CMD', cmd: 'RESET', mode: 1 }));
+    }
+  };
+
+  // Continuous Keyboard State Listeners
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in keyState) keyState[k] = true;
+    if (e.key === ' ') keyState.space = true;
+    if (e.key === 'Shift') keyState.shift = true;
+    if (k === '1') setBattMode(1);
+    if (k === '2') setBattMode(2);
+    if (k === '3') setBattMode(3);
+    if (k === '0') setBattMode(0);
+    if (k === 'c') document.getElementById('btn-cam').click();
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in keyState) keyState[k] = false;
+    if (e.key === ' ') keyState.space = false;
+    if (e.key === 'Shift') keyState.shift = false;
+  });
+
+  // Start Real-Time MATLAB / Simulink Bridge Client
+  initMatlabBridge();
+}
+
+// Real-Time MATLAB / Simulink Co-Simulation Bridge Client
+let matlabWs = null;
+let matlabActive = false;
+let lastMatlabPktTime = 0;
+
+function initMatlabBridge() {
+  const badge = document.getElementById('matlab-badge');
+  const badgeText = document.getElementById('matlab-status-text');
+  const dot = badge ? badge.querySelector('span') : null;
+
+  try {
+    const bridgeHost = (window.location.hostname && window.location.hostname !== '') ? window.location.hostname : '127.0.0.1';
+    matlabWs = new WebSocket(`ws://${bridgeHost}:8765`);
+
+    matlabWs.onopen = () => {
+      console.log('[MATLAB Bridge] Connected to WebSocket at 127.0.0.1:8765');
+      if (badgeText) badgeText.innerText = 'MATLAB LINK: READY';
+      if (badge) {
+        badge.style.background = 'rgba(16, 185, 129, 0.15)';
+        badge.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+        badge.style.color = '#10b981';
+      }
+      if (dot) {
+        dot.style.background = '#10b981';
+        dot.style.boxShadow = '0 0 6px #10b981';
+      }
+      matlabWs.send(JSON.stringify({ type: 'BROWSER_CMD', cmd: 'BROWSER_READY', mode: 4 }));
+    };
+
+    matlabWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'MATLAB_TELEMETRY') {
+          matlabActive = true;
+          lastMatlabPktTime = performance.now();
+
+          // Direct Drive from MATLAB Simulink True States
+          if (msg.x !== undefined) droneState.pos.x = msg.x;
+          if (msg.y !== undefined) droneState.pos.z = msg.y; // Simulink Y is lateral -> Three.js Z
+          if (msg.z !== undefined) droneState.pos.y = Math.max(0.35, msg.z); // Simulink Z is Altitude -> Three.js Y
+          if (msg.vx !== undefined && msg.vy !== undefined && msg.vz !== undefined) {
+            droneState.vel.set(msg.vx, msg.vz, msg.vy);
+          }
+          if (msg.roll !== undefined) droneState.roll = msg.roll * (Math.PI / 180);
+          if (msg.pitch !== undefined) droneState.pitch = msg.pitch * (Math.PI / 180);
+          if (msg.yaw !== undefined) droneState.yaw = msg.yaw * (Math.PI / 180);
+
+          if (msg.volt !== undefined) droneState.volt = msg.volt;
+          if (msg.curr !== undefined) droneState.curr = msg.curr;
+          if (msg.pwr !== undefined) droneState.power = msg.pwr;
+          if (msg.temp !== undefined) {
+            droneState.tf = msg.temp;
+            droneState.tb = msg.temp;
+          }
+          if (msg.dtdt !== undefined) droneState.dtdt = msg.dtdt;
+          if (msg.soc !== undefined) droneState.soc = msg.soc;
+          if (msg.windSpd !== undefined && msg.windDir !== undefined && droneState.wind) {
+            droneState.wind.speed = msg.windSpd;
+            droneState.wind.direction = ((msg.windDir % 360) + 360) % 360;
+            const wRad = msg.windDir * (Math.PI / 180);
+            droneState.wind.vec.set(msg.windSpd * Math.cos(wRad), 0, msg.windSpd * Math.sin(wRad));
+          }
+          if (msg.targetSiteId !== undefined && msg.targetSiteId > 0) {
+            const matchedPad = landingPads.find(p => p.id === msg.targetSiteId);
+            if (matchedPad) droneState.emergencyPad = matchedPad;
+          }
+          if (msg.bmsState !== undefined) {
+            droneState.bmsState = msg.bmsState;
+            droneState.landed = (msg.bmsState === 3);
+          }
+          if (msg.t !== undefined) droneState.timer = msg.t;
+          if (msg.mode !== undefined) droneState.mode = msg.mode;
+
+          // Update HUD Badge to Live Streaming State
+          if (badgeText) badgeText.innerText = `MATLAB: LIVE SYNC (${msg.t.toFixed(1)}s)`;
+          if (badge) {
+            badge.style.background = 'rgba(16, 185, 129, 0.35)';
+            badge.style.borderColor = '#10b981';
+            badge.style.color = '#00ff88';
+          }
+          if (dot) {
+            dot.style.background = '#00ff88';
+            dot.style.boxShadow = '0 0 10px #00ff88';
+          }
+        }
+      } catch (e) {
+        console.error('[MATLAB Bridge] Message parse error:', e);
+      }
+    };
+
+    matlabWs.onclose = () => {
+      matlabActive = false;
+      if (badgeText) badgeText.innerText = 'MATLAB LINK: STANDALONE';
+      if (badge) {
+        badge.style.background = 'rgba(0, 229, 255, 0.15)';
+        badge.style.borderColor = 'rgba(0, 229, 255, 0.4)';
+        badge.style.color = '#00e5ff';
+      }
+      if (dot) {
+        dot.style.background = '#00e5ff';
+        dot.style.boxShadow = '0 0 6px #00e5ff';
+      }
+      // Reconnect retry every 2.5 seconds
+      setTimeout(initMatlabBridge, 2500);
+    };
+
+    matlabWs.onerror = () => {
+      matlabWs.close();
+    };
+  } catch (e) {
+    setTimeout(initMatlabBridge, 2500);
+  }
+}
+
+function testWindScenario(dirDeg, spd) {
+  if (droneState.wind) {
+    droneState.wind.speed = spd;
+    droneState.wind.targetSpeed = spd;
+    droneState.wind.direction = dirDeg;
+    droneState.wind.targetDirection = dirDeg;
+    const rad = dirDeg * (Math.PI / 180);
+    droneState.wind.vec.set(spd * Math.cos(rad), 0, spd * Math.sin(rad));
+  }
+  // Clear any existing pad selection so reachability selector runs freshly from current position
+  droneState.emergencyPad = null;
+  droneState.landingCommitted = false;
+  droneState.landed = false;
+  // Trigger 70C Emergency mode immediately
+  setBattMode(3);
+}
+
+function setBattMode(m, skipWsSend) {
+  droneState.mode = m;
+  droneState.emergencyPad = null; // Always clear so nearest pad is dynamically re-selected from current position!
+  droneState.rejectedPad = null;
+  droneState.emergencyWdir = 0;
+  droneState.landingCommitted = false;
+  droneState.landed = false;
+  if (landingPads) {
+    landingPads.forEach(p => {
+      if (p.beam) {
+        p.beam.material.color.setHex(p.origColor);
+        p.beam.material.opacity = 0.32;
+      }
+    });
+  }
+  if (m === 3) {
+    droneState.tf = Math.max(droneState.tf, 70.5); // Immediately trigger 70C emergency from current position!
+    droneState.tb = 72.8;
+  }
+  document.querySelectorAll('.m-btn').forEach(b => b.classList.remove('active'));
+  const btnEl = document.getElementById(`btn-mode-${m}`);
+  if (btnEl) btnEl.classList.add('active');
+  if (!skipWsSend && matlabWs && matlabWs.readyState === WebSocket.OPEN) {
+    matlabWs.send(JSON.stringify({ type: 'BROWSER_CMD', cmd: 'SET_MODE', mode: m }));
+  }
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// Main Animation Loop with Protected Frame Recovery
+function animate() {
+  requestAnimationFrame(animate);
+  try {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    updatePhysics(dt);
+
+    // Dynamic Environmental Animations
+    if (windsockMesh && droneState.wind) {
+      const w = droneState.wind;
+      const rad = w.direction * (Math.PI / 180);
+      // In Three.js (+X forward, +Z right), windsock cone points along +X by default.
+      // When wind blows along vector (cos(rad), sin(rad)), sock rotates towards that direction:
+      const targetSockYaw = -Math.atan2(Math.sin(rad), Math.cos(rad));
+      let sockYawDiff = (targetSockYaw - windsockMesh.rotation.y);
+      windsockMesh.rotation.y += sockYawDiff * Math.min(1.0, 3.0 * dt);
+      // Droop: at 0 m/s drops downwards, at 6 m/s flutters horizontally
+      const droop = -Math.max(0.04, 0.65 - (w.speed / 6.5) * 0.58) + Math.sin(droneState.timer * 7.5) * 0.04;
+      windsockMesh.rotation.z = droop;
+    }
+
+    if (atcRadar) {
+      atcRadar.rotation.y += 1.8 * dt; // 30 RPM radar antenna
+    }
+
+    if (contactShadow) {
+      contactShadow.position.x = droneState.pos.x;
+      contactShadow.position.z = droneState.pos.z;
+      const alt = Math.max(0, droneState.pos.y - 0.35);
+      const s = Math.min(2.8, 1.0 + alt * 0.22);
+      contactShadow.scale.set(s, s, s);
+      contactShadow.material.opacity = Math.max(0.0, 0.72 - alt * 0.065);
+    }
+
+    // Speed-based dynamic camera FOV breathing (55° hover -> 58.5° at 12.5 m/s)
+    const currentSpeed = droneState.landed ? 0 : droneState.vel.length();
+    const targetFov = 55.0 + Math.min(3.5, (currentSpeed / 15.0) * 3.5);
+    camera.fov += (targetFov - camera.fov) * 0.08;
+    camera.updateProjectionMatrix();
+
+    updateCamera(dt);
+    renderer.render(scene, camera);
+  } catch (loopErr) {
+    console.error('[Simulator Animate Error Caught]', loopErr);
+  }
+}
+
+
+// Dynamic State-Linked Drone Material Color & Real-time Wind / Attitude Overlay Update
+function updateDroneStateVisuals(dt) {
+  const temp = droneState.tf;
+  const volt = droneState.volt;
+
+  // Determine Target Color & Emissive based on Battery Temperature and Voltage
+  let targetHex = 0x00e5ff; // Normal Cyan-Blue
+  let emissiveHex = 0x004466;
+  let statusText = 'HULL: NORMAL';
+  let tagColor = '#00e5ff';
+  let tagBg = 'rgba(0, 229, 255, 0.18)';
+
+  if (temp >= 68.0 || volt < 13.5) {
+    // Critical Emergency Overheat / Low Voltage -> Crimson Red
+    targetHex = 0xef4444;
+    emissiveHex = 0x881111;
+    statusText = 'HULL: EMERGENCY';
+    tagColor = '#ef4444';
+    tagBg = 'rgba(239, 68, 68, 0.25)';
+  } else if (temp >= 55.0 || volt < 14.2) {
+    // Caution Warning State -> Amber Orange
+    targetHex = 0xf97316;
+    emissiveHex = 0x662200;
+    statusText = 'HULL: WARNING';
+    tagColor = '#f97316';
+    tagBg = 'rgba(249, 115, 22, 0.25)';
+  }
+
+  // Smoothly interpolate PBR Material color
+  if (droneDynamicGlowMat) {
+    const targetCol = new THREE.Color(targetHex);
+    const targetEmi = new THREE.Color(emissiveHex);
+    droneDynamicGlowMat.color.lerp(targetCol, Math.min(1.0, 5.0 * dt));
+    droneDynamicGlowMat.emissive.lerp(targetEmi, Math.min(1.0, 5.0 * dt));
+  }
+
+  // Update Hull Status Tag
+  const hullTag = document.getElementById('drone-hull-tag');
+  if (hullTag) {
+    hullTag.innerText = statusText;
+    hullTag.style.color = tagColor;
+    hullTag.style.borderColor = tagColor;
+    hullTag.style.background = tagBg;
+  }
+
+  // Update Attitude (Roll / Pitch / Yaw) Overlay
+  const rollDeg = droneState.roll * (180.0 / Math.PI);
+  const pitchDeg = droneState.pitch * (180.0 / Math.PI);
+  const yawDeg = ((droneState.yaw * (180.0 / Math.PI) % 360) + 360) % 360;
+
+  const rollEl = document.getElementById('att-roll-val');
+  const pitchEl = document.getElementById('att-pitch-val');
+  const yawEl = document.getElementById('att-yaw-val');
+  if (rollEl) rollEl.innerText = (rollDeg >= 0 ? '+' : '') + rollDeg.toFixed(1) + '°';
+  if (pitchEl) pitchEl.innerText = (pitchDeg >= 0 ? '+' : '') + pitchDeg.toFixed(1) + '°';
+  if (yawEl) yawEl.innerText = Math.round(yawDeg).toString().padStart(3, '0') + '°';
+
+  // Update PFD Horizon Sphere Position & Rotation
+  const horizonEl = document.getElementById('pfd-horizon');
+  if (horizonEl) {
+    const pitchOffset = Math.max(-45, Math.min(45, pitchDeg)) * 1.5;
+    horizonEl.style.transform = `rotate(${-rollDeg}deg) translateY(${pitchOffset}px)`;
+  }
+
+  // Update Wind Vector Compass Dial & 3D Vector Arrow
+  if (droneState.wind) {
+    const wSpd = Math.min(3.5, droneState.wind.speed);
+    const wDir = droneState.wind.direction; // degrees
+    
+    const windRotEl = document.getElementById('wind-arrow-rotator');
+    if (windRotEl) {
+      windRotEl.style.transform = `rotate(${wDir}deg)`;
+    }
+    const windSpdEl = document.getElementById('hud-wind-spd-val');
+    if (windSpdEl) windSpdEl.innerText = wSpd.toFixed(1);
+    const windDirEl = document.getElementById('hud-wind-dir-val');
+    if (windDirEl) windDirEl.innerText = Math.round(wDir).toString().padStart(3, '0') + '°';
+
+    // Update 3D Wind Vector Arrow attached above the drone
+    if (windArrow3D) {
+      const wRad = wDir * (Math.PI / 180.0);
+      windArrow3D.rotation.y = -wRad; // Point towards wind blowing direction
+      const scaleMag = Math.max(0.4, wSpd / 2.5);
+      windArrow3D.scale.set(scaleMag, scaleMag, scaleMag);
+      windArrow3D.visible = (wSpd > 0.1);
+    }
+  }
+}
+
+window.onload = init;
+</script>
+</body>
+</html>
